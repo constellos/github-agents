@@ -159,20 +159,61 @@ jobs:
 
             ## Output Format
 
-            Provide a detailed analysis, then your final decision.
+            Provide a detailed analysis, then output your final decision as a JSON code block.
 
-          claude_args: |
-            --json-schema '{"type":"object","properties":{"passed":{"type":"boolean","description":"Whether the review passed"},"confidence":{"type":"number","minimum":0,"maximum":1,"description":"Confidence in the decision (0-1)"},"requirements_met":{"type":"array","items":{"type":"string"},"description":"List of requirements that were met"},"requirements_missing":{"type":"array","items":{"type":"string"},"description":"List of requirements that were not met"},"unresolved_comments":{"type":"array","items":{"type":"string"},"description":"List of unresolved comments/feedback"},"scope_issues":{"type":"array","items":{"type":"string"},"description":"List of scope issues"},"summary":{"type":"string","description":"Summary of the review"},"recommended_actions":{"type":"array","items":{"type":"string"},"description":"Recommended actions if review failed"}},"required":["passed","confidence","summary"]}'
+            Your response MUST end with a JSON code block in this exact format:
+
+            ```json
+            {
+              "passed": true/false,
+              "confidence": 0.0-1.0,
+              "requirements_met": ["list of met requirements"],
+              "requirements_missing": ["list of missing requirements"],
+              "unresolved_comments": ["list of unresolved feedback"],
+              "scope_issues": ["list of scope issues"],
+              "summary": "Brief summary of your decision",
+              "recommended_actions": ["list of actions if failed"]
+            }
+            ```
+
+      - name: Extract review result
+        id: extract
+        run: |
+          # Read execution file and extract JSON from Claude's response
+          EXEC_FILE="${{ steps.review.outputs.execution_file }}"
+          if [ -f "$EXEC_FILE" ]; then
+            # Extract the last JSON code block from Claude's response
+            # The execution file contains the full conversation log
+            OUTPUT=$(cat "$EXEC_FILE" | jq -r '
+              [.[] | select(.type == "assistant") | .message.content[]? | select(.type == "text") | .text] | last
+            ' 2>/dev/null | grep -Pzo '```json\s*\K[\s\S]*?(?=\s*```)' | tr -d '\0' || echo '{}')
+
+            # If that didn't work, try simpler extraction
+            if [ "$OUTPUT" = "{}" ] || [ -z "$OUTPUT" ]; then
+              OUTPUT=$(cat "$EXEC_FILE" | grep -Pzo '```json\s*\K[\s\S]*?(?=\s*```)' | tr -d '\0' | tail -1 || echo '{}')
+            fi
+          else
+            OUTPUT='{}'
+          fi
+
+          # Validate JSON and extract fields
+          if echo "$OUTPUT" | jq . >/dev/null 2>&1; then
+            echo "output<<EOF" >> $GITHUB_OUTPUT
+            echo "$OUTPUT" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          else
+            echo 'output={"passed":false,"confidence":0,"summary":"Failed to parse Claude response"}' >> $GITHUB_OUTPUT
+          fi
 
       - name: Post review comment
         if: github.event_name == 'pull_request'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          OUTPUT='${{ steps.review.outputs.structured_output }}'
-          PASSED=$(echo "$OUTPUT" | jq -r '.passed')
-          CONFIDENCE=$(echo "$OUTPUT" | jq -r '.confidence')
-          SUMMARY=$(echo "$OUTPUT" | jq -r '.summary')
+          OUTPUT='${{ steps.extract.outputs.output }}'
+          PASSED=$(echo "$OUTPUT" | jq -r '.passed // false')
+          CONFIDENCE=$(echo "$OUTPUT" | jq -r '.confidence // 0')
+          SUMMARY=$(echo "$OUTPUT" | jq -r '.summary // "No summary available"')
 
           if [ "$PASSED" = "true" ]; then
             STATUS_ICON=":white_check_mark:"
@@ -239,9 +280,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          OUTPUT='${{ steps.review.outputs.structured_output }}'
-          PASSED=$(echo "$OUTPUT" | jq -r '.passed')
-          SUMMARY=$(echo "$OUTPUT" | jq -r '.summary' | head -c 140)
+          OUTPUT='${{ steps.extract.outputs.output }}'
+          PASSED=$(echo "$OUTPUT" | jq -r '.passed // false')
+          SUMMARY=$(echo "$OUTPUT" | jq -r '.summary // "No summary"' | head -c 140)
 
           if [ "$PASSED" = "true" ]; then
             STATE="success"
@@ -259,8 +300,8 @@ jobs:
 
       - name: Fail if review failed
         run: |
-          OUTPUT='${{ steps.review.outputs.structured_output }}'
-          PASSED=$(echo "$OUTPUT" | jq -r '.passed')
+          OUTPUT='${{ steps.extract.outputs.output }}'
+          PASSED=$(echo "$OUTPUT" | jq -r '.passed // false')
 
           if [ "$PASSED" != "true" ]; then
             echo "::error::Requirements review failed. See PR comment for details."

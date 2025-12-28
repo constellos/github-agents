@@ -129,19 +129,68 @@ jobs:
 
             ## Output Format
 
-            Provide skill-by-skill analysis, then overall assessment.
+            Provide skill-by-skill analysis, then output your final decision as a JSON code block.
 
-          claude_args: |
-            --json-schema '{"type":"object","properties":{"passed":{"type":"boolean"},"confidence":{"type":"number","minimum":0,"maximum":1},"skill_evaluations":{"type":"array","items":{"type":"object","properties":{"skill_file":{"type":"string"},"frontmatter_valid":{"type":"boolean"},"context_efficiency":{"type":"number","minimum":1,"maximum":10,"description":"1=bloated, 10=optimally dense"},"structure_score":{"type":"number","minimum":1,"maximum":10},"documentation_links":{"type":"boolean","description":"Has links to official docs"},"progressive_disclosure":{"type":"boolean"},"issues":{"type":"array","items":{"type":"string"}},"suggestions":{"type":"array","items":{"type":"string"}}}}},"optimization_opportunities":{"type":"array","items":{"type":"string"}},"split_recommendations":{"type":"array","items":{"type":"object","properties":{"skill_file":{"type":"string"},"reason":{"type":"string"},"suggested_split":{"type":"array","items":{"type":"string"}}}}},"summary":{"type":"string"}},"required":["passed","confidence","summary"]}'
+            Your response MUST end with a JSON code block in this exact format:
+
+            ```json
+            {
+              "passed": true/false,
+              "confidence": 0.0-1.0,
+              "skill_evaluations": [
+                {
+                  "skill_file": "path/to/SKILL.md",
+                  "frontmatter_valid": true/false,
+                  "context_efficiency": 1-10,
+                  "structure_score": 1-10,
+                  "documentation_links": true/false,
+                  "progressive_disclosure": true/false,
+                  "issues": ["issue descriptions"],
+                  "suggestions": ["suggestions"]
+                }
+              ],
+              "optimization_opportunities": ["opportunities"],
+              "split_recommendations": [
+                {
+                  "skill_file": "path/to/SKILL.md",
+                  "reason": "why split needed",
+                  "suggested_split": ["new-skill-1", "new-skill-2"]
+                }
+              ],
+              "summary": "Brief summary of your decision"
+            }
+            ```
+
+      - name: Extract review result
+        id: extract
+        run: |
+          EXEC_FILE="${{ steps.review.outputs.execution_file }}"
+          if [ -f "$EXEC_FILE" ]; then
+            OUTPUT=$(cat "$EXEC_FILE" | jq -r '
+              [.[] | select(.type == "assistant") | .message.content[]? | select(.type == "text") | .text] | last
+            ' 2>/dev/null | grep -Pzo '```json\s*\K[\s\S]*?(?=\s*```)' | tr -d '\0' || echo '{}')
+            if [ "$OUTPUT" = "{}" ] || [ -z "$OUTPUT" ]; then
+              OUTPUT=$(cat "$EXEC_FILE" | grep -Pzo '```json\s*\K[\s\S]*?(?=\s*```)' | tr -d '\0' | tail -1 || echo '{}')
+            fi
+          else
+            OUTPUT='{}'
+          fi
+          if echo "$OUTPUT" | jq . >/dev/null 2>&1; then
+            echo "output<<EOF" >> $GITHUB_OUTPUT
+            echo "$OUTPUT" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          else
+            echo 'output={"passed":false,"confidence":0,"summary":"Failed to parse Claude response"}' >> $GITHUB_OUTPUT
+          fi
 
       - name: Post review comment
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          OUTPUT='${{ steps.review.outputs.structured_output }}'
-          PASSED=$(echo "$OUTPUT" | jq -r '.passed')
-          CONFIDENCE=$(echo "$OUTPUT" | jq -r '.confidence')
-          SUMMARY=$(echo "$OUTPUT" | jq -r '.summary')
+          OUTPUT='${{ steps.extract.outputs.output }}'
+          PASSED=$(echo "$OUTPUT" | jq -r '.passed // false')
+          CONFIDENCE=$(echo "$OUTPUT" | jq -r '.confidence // 0')
+          SUMMARY=$(echo "$OUTPUT" | jq -r '.summary // "No summary available"')
 
           if [ "$PASSED" = "true" ]; then
             STATUS_ICON=":white_check_mark:"
@@ -194,9 +243,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          OUTPUT='${{ steps.review.outputs.structured_output }}'
-          PASSED=$(echo "$OUTPUT" | jq -r '.passed')
-          SUMMARY=$(echo "$OUTPUT" | jq -r '.summary' | head -c 140)
+          OUTPUT='${{ steps.extract.outputs.output }}'
+          PASSED=$(echo "$OUTPUT" | jq -r '.passed // false')
+          SUMMARY=$(echo "$OUTPUT" | jq -r '.summary // "No summary"' | head -c 140)
 
           if [ "$PASSED" = "true" ]; then
             STATE="success"
@@ -214,8 +263,8 @@ jobs:
 
       - name: Fail if review failed
         run: |
-          OUTPUT='${{ steps.review.outputs.structured_output }}'
-          PASSED=$(echo "$OUTPUT" | jq -r '.passed')
+          OUTPUT='${{ steps.extract.outputs.output }}'
+          PASSED=$(echo "$OUTPUT" | jq -r '.passed // false')
 
           if [ "$PASSED" != "true" ]; then
             echo "::warning::Skills review identified improvements needed. See PR comment."
