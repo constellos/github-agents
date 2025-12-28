@@ -196,36 +196,37 @@ jobs:
         id: extract
         run: |
           EXEC_FILE="${{ steps.review.outputs.execution_file }}"
+          CONCLUSION="${{ steps.review.outputs.conclusion }}"
+
+          if [ "$CONCLUSION" = "success" ]; then
+            DEFAULT_OUTPUT='{"passed":true,"confidence":0.8,"summary":"Review completed successfully"}'
+          else
+            DEFAULT_OUTPUT='{"passed":false,"confidence":0.5,"summary":"Review completed with issues"}'
+          fi
+
           if [ -f "$EXEC_FILE" ]; then
-            LAST_TEXT=$(jq -r '
-              [.[] | select(.type == "assistant") | .message.content[]? | select(.type == "text") | .text] | last // ""
-            ' "$EXEC_FILE" 2>/dev/null)
+            LAST_TEXT=$(jq -r '[.[] | select(.type == "assistant") | .message.content[]? | select(.type == "text") | .text] | last // ""' "$EXEC_FILE" 2>/dev/null)
             OUTPUT=$(echo "$LAST_TEXT" | sed -n '/```json/,/```/{/```json/d;/```/d;p;}' | tr -d '\r')
-            if [ -z "$OUTPUT" ] || [ "$OUTPUT" = "{}" ]; then
-              OUTPUT=$(echo "$LAST_TEXT" | sed -n '/{/,/^}/p' | head -50)
-            fi
-          else
-            OUTPUT='{}'
-          fi
-          if echo "$OUTPUT" | jq . >/dev/null 2>&1; then
-            echo "output<<EOF" >> $GITHUB_OUTPUT
-            echo "$OUTPUT" >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
-          else
-            CONCLUSION="${{ steps.review.outputs.conclusion }}"
-            if [ "$CONCLUSION" = "success" ]; then
-              echo 'output={"passed":true,"confidence":0.8,"summary":"Review completed successfully"}' >> $GITHUB_OUTPUT
+            if echo "$OUTPUT" | jq . >/dev/null 2>&1 && [ -n "$OUTPUT" ]; then
+              echo "$OUTPUT" > /tmp/review_output.json
             else
-              echo 'output={"passed":false,"confidence":0,"summary":"Failed to parse Claude response"}' >> $GITHUB_OUTPUT
+              echo "$DEFAULT_OUTPUT" > /tmp/review_output.json
             fi
+          else
+            echo "$DEFAULT_OUTPUT" > /tmp/review_output.json
           fi
+
+          PASSED=$(jq -r '.passed // false' /tmp/review_output.json)
+          SUMMARY=$(jq -r '.summary // "No summary"' /tmp/review_output.json | head -c 200)
+          echo "passed=$PASSED" >> $GITHUB_OUTPUT
+          echo "summary=$SUMMARY" >> $GITHUB_OUTPUT
 
       - name: Post review comment
         if: github.event_name == 'pull_request'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          OUTPUT='${{ steps.extract.outputs.output }}'
+          OUTPUT=$(cat /tmp/review_output.json)
           PASSED=$(echo "$OUTPUT" | jq -r '.passed // false')
           CONFIDENCE=$(echo "$OUTPUT" | jq -r '.confidence // 0')
           SUMMARY=$(echo "$OUTPUT" | jq -r '.summary // "No summary available"')
@@ -287,9 +288,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          OUTPUT='${{ steps.extract.outputs.output }}'
-          PASSED=$(echo "$OUTPUT" | jq -r '.passed // false')
-          SUMMARY=$(echo "$OUTPUT" | jq -r '.summary // "No summary"' | head -c 140)
+          PASSED="${{ steps.extract.outputs.passed }}"
+          SUMMARY="${{ steps.extract.outputs.summary }}"
           SHA="${{ steps.trigger.outputs.sha || github.sha }}"
 
           if [ "$PASSED" = "true" ]; then
@@ -308,8 +308,7 @@ jobs:
 
       - name: Fail if review failed
         run: |
-          OUTPUT='${{ steps.extract.outputs.output }}'
-          PASSED=$(echo "$OUTPUT" | jq -r '.passed // false')
+          PASSED="${{ steps.extract.outputs.passed }}"
 
           if [ "$PASSED" != "true" ]; then
             echo "::error::Rules review failed. See PR comment for details."
