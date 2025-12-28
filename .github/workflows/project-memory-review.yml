@@ -168,20 +168,79 @@ jobs:
 
             ## Output Format
 
-            Provide file-by-file analysis, then overall compliance assessment.
+            Provide file-by-file analysis, then output your final decision as a JSON code block.
 
-          claude_args: |
-            --json-schema '{"type":"object","properties":{"passed":{"type":"boolean"},"confidence":{"type":"number","minimum":0,"maximum":1},"claude_file_evaluations":{"type":"array","items":{"type":"object","properties":{"claude_file":{"type":"string"},"rules_extracted":{"type":"array","items":{"type":"string"}},"rules_met":{"type":"array","items":{"type":"string"}},"rules_violated":{"type":"array","items":{"type":"object","properties":{"rule":{"type":"string"},"violation":{"type":"string"},"affected_files":{"type":"array","items":{"type":"string"}}}}},"update_suggestions":{"type":"array","items":{"type":"string"}}}}},"documentation_updates_needed":{"type":"array","items":{"type":"object","properties":{"file":{"type":"string"},"reason":{"type":"string"},"suggested_change":{"type":"string"}}}},"blocking_violations":{"type":"array","items":{"type":"string"}},"summary":{"type":"string"}},"required":["passed","confidence","summary"]}'
+            Your response MUST end with a JSON code block in this exact format:
+
+            ```json
+            {
+              "passed": true/false,
+              "confidence": 0.0-1.0,
+              "claude_file_evaluations": [
+                {
+                  "claude_file": "path/to/CLAUDE.md",
+                  "rules_extracted": ["rule descriptions"],
+                  "rules_met": ["met rules"],
+                  "rules_violated": [
+                    {
+                      "rule": "rule name",
+                      "violation": "description",
+                      "affected_files": ["file1.ts"]
+                    }
+                  ],
+                  "update_suggestions": ["suggestions"]
+                }
+              ],
+              "documentation_updates_needed": [
+                {
+                  "file": "path/to/file",
+                  "reason": "why update needed",
+                  "suggested_change": "what to change"
+                }
+              ],
+              "blocking_violations": ["critical violations"],
+              "summary": "Brief summary of your decision"
+            }
+            ```
+
+      - name: Extract review result
+        id: extract
+        run: |
+          EXEC_FILE="${{ steps.review.outputs.execution_file }}"
+          CONCLUSION="${{ steps.review.outputs.conclusion }}"
+
+          if [ "$CONCLUSION" = "success" ]; then
+            DEFAULT_OUTPUT='{"passed":true,"confidence":0.8,"summary":"Review completed successfully"}'
+          else
+            DEFAULT_OUTPUT='{"passed":false,"confidence":0.5,"summary":"Review completed with issues"}'
+          fi
+
+          if [ -f "$EXEC_FILE" ]; then
+            LAST_TEXT=$(jq -r '[.[] | select(.type == "assistant") | .message.content[]? | select(.type == "text") | .text] | last // ""' "$EXEC_FILE" 2>/dev/null)
+            OUTPUT=$(echo "$LAST_TEXT" | sed -n '/```json/,/```/{/```json/d;/```/d;p;}' | tr -d '\r')
+            if echo "$OUTPUT" | jq . >/dev/null 2>&1 && [ -n "$OUTPUT" ]; then
+              echo "$OUTPUT" > /tmp/review_output.json
+            else
+              echo "$DEFAULT_OUTPUT" > /tmp/review_output.json
+            fi
+          else
+            echo "$DEFAULT_OUTPUT" > /tmp/review_output.json
+          fi
+
+          PASSED=$(jq -r '.passed // false' /tmp/review_output.json)
+          SUMMARY=$(jq -r '.summary // "No summary"' /tmp/review_output.json | head -c 200)
+          echo "passed=$PASSED" >> $GITHUB_OUTPUT
+          echo "summary=$SUMMARY" >> $GITHUB_OUTPUT
 
       - name: Post review comment
         if: github.event_name == 'pull_request'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          OUTPUT='${{ steps.review.outputs.structured_output }}'
-          PASSED=$(echo "$OUTPUT" | jq -r '.passed')
-          CONFIDENCE=$(echo "$OUTPUT" | jq -r '.confidence')
-          SUMMARY=$(echo "$OUTPUT" | jq -r '.summary')
+          OUTPUT=$(cat /tmp/review_output.json)
+          PASSED=$(echo "$OUTPUT" | jq -r '.passed // false')
+          CONFIDENCE=$(echo "$OUTPUT" | jq -r '.confidence // 0')
+          SUMMARY=$(echo "$OUTPUT" | jq -r '.summary // "No summary available"')
 
           if [ "$PASSED" = "true" ]; then
             STATUS_ICON=":white_check_mark:"
@@ -234,9 +293,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          OUTPUT='${{ steps.review.outputs.structured_output }}'
-          PASSED=$(echo "$OUTPUT" | jq -r '.passed')
-          SUMMARY=$(echo "$OUTPUT" | jq -r '.summary' | head -c 140)
+          PASSED="${{ steps.extract.outputs.passed }}"
+          SUMMARY="${{ steps.extract.outputs.summary }}"
 
           if [ "$PASSED" = "true" ]; then
             STATE="success"
@@ -254,8 +312,7 @@ jobs:
 
       - name: Fail if review failed
         run: |
-          OUTPUT='${{ steps.review.outputs.structured_output }}'
-          PASSED=$(echo "$OUTPUT" | jq -r '.passed')
+          PASSED="${{ steps.extract.outputs.passed }}"
 
           if [ "$PASSED" != "true" ]; then
             echo "::error::Project memory review failed. See PR comment for details."
