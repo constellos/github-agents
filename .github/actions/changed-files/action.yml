@@ -68,10 +68,25 @@ runs:
         TEST_FILES=$(echo "$CHANGED" | grep -E '\.(test|spec)\.(ts|tsx|js|jsx)$' || echo "")
 
         # Count and flags
-        COUNT=$(echo "$FILTERED" | grep -c . || echo "0")
-        HAS_CHANGES=$([[ $COUNT -gt 0 ]] && echo 'true' || echo 'false')
-        HAS_TS=$([[ -n "$TS_FILES" ]] && echo 'true' || echo 'false')
-        HAS_TESTS=$([[ -n "$TEST_FILES" ]] && echo 'true' || echo 'false')
+        if [ -n "$FILTERED" ]; then
+          COUNT=$(echo "$FILTERED" | wc -l)
+          HAS_CHANGES='true'
+        else
+          COUNT=0
+          HAS_CHANGES='false'
+        fi
+
+        if [ -n "$TS_FILES" ]; then
+          HAS_TS='true'
+        else
+          HAS_TS='false'
+        fi
+
+        if [ -n "$TEST_FILES" ]; then
+          HAS_TESTS='true'
+        else
+          HAS_TESTS='false'
+        fi
 
         # Set outputs
         echo "changed_files<<EOF" >> $GITHUB_OUTPUT
