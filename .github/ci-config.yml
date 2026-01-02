@@ -1,0 +1,38 @@
+# CI Configuration
+# Controls which CI workflows run in this repository
+
+ci:
+  # Basic CI (always enabled)
+  basic:
+    enabled: true
+    lint: true
+    typecheck: true
+    vitest: true
+
+  # E2E Testing
+  e2e:
+    enabled: true
+    framework: playwright
+
+  # Code Reviews (runs on every commit)
+  reviews:
+    enabled: true
+    requirements: true
+    rules: true
+    project_memory: true
+    agents: true
+    skills: true
+    playwright_ui: true
+
+  # Deployment CI (PR only)
+  deployment:
+    enabled: false
+
+    vercel:
+      enabled: false
+
+    supabase:
+      enabled: false
+
+    cloudflare:
+      enabled: false
