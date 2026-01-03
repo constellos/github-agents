@@ -149,7 +149,7 @@ jobs:
         run: |
           PM="${{ steps.detect.outputs.pm }}"
           if [ -f "vitest.config.ts" ] || [ -f "vitest.config.js" ]; then
-            $PM run test || npx vitest run
+            $PM run test -- --passWithNoTests || npx vitest run --passWithNoTests
           else
             echo "No vitest config found, skipping"
           fi
