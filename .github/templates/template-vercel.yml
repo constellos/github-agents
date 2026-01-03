@@ -1,0 +1,58 @@
+# =============================================================================
+# CI Configuration Template: Vercel + E2E + UI Review
+# =============================================================================
+#
+# Use this template for:
+#   - Next.js applications deployed to Vercel
+#   - Full-stack web apps with frontend + API routes
+#   - Projects requiring E2E testing with Playwright
+#   - Apps that benefit from AI-powered UI review
+#
+# To use: Copy this file to your repo root as `.github/ci-config.yml`
+# =============================================================================
+
+ci:
+  # ---------------------------------------------------------------------------
+  # Basic CI Checks
+  # ---------------------------------------------------------------------------
+  # These run on every PR and push to ensure code quality
+  basic:
+    enabled: true
+    lint: true          # Run ESLint to catch code issues
+    typecheck: true     # Run TypeScript compiler for type safety
+    vitest: true        # Run unit/integration tests with Vitest
+
+  # ---------------------------------------------------------------------------
+  # End-to-End Testing
+  # ---------------------------------------------------------------------------
+  # Playwright tests run against the deployed preview
+  e2e:
+    enabled: true
+    framework: playwright
+    wait_for_deployment: true   # Wait for Vercel preview before running tests
+
+  # ---------------------------------------------------------------------------
+  # AI-Powered Code Reviews
+  # ---------------------------------------------------------------------------
+  # Claude Code reviews PRs based on configured rules and context
+  reviews:
+    enabled: true
+    requirements: true      # Check PR against project requirements
+    rules: true             # Enforce coding standards from .claude/rules/
+    project_memory: true    # Use project context for smarter reviews
+    agents: true            # Enable multi-agent review capabilities
+    skills: true            # Use specialized review skills
+    playwright_ui: true     # AI reviews UI changes via Playwright screenshots
+
+  # ---------------------------------------------------------------------------
+  # Deployment Configuration
+  # ---------------------------------------------------------------------------
+  # Configure your deployment platform(s)
+  deployment:
+    enabled: true
+    vercel:
+      enabled: true         # Deploy previews and production to Vercel
+    supabase:
+      enabled: false        # Set true if using Supabase backend
+    cloudflare:
+      enabled: false        # Not using Cloudflare for this setup

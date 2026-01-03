@@ -1,0 +1,61 @@
+# =============================================================================
+# CI Configuration Template: Non-Deployable (Library/Actions)
+# =============================================================================
+#
+# Use this template for:
+#   - NPM packages and libraries
+#   - GitHub Actions repositories
+#   - CLI tools and utilities
+#   - Monorepo shared packages
+#   - Any project that doesn't deploy to a hosting platform
+#
+# To use: Copy this file to your repo root as `.github/ci-config.yml`
+#
+# Note: E2E and UI review are disabled since there's no deployment to test against
+# =============================================================================
+
+ci:
+  # ---------------------------------------------------------------------------
+  # Basic CI Checks
+  # ---------------------------------------------------------------------------
+  # These run on every PR and push to ensure code quality
+  basic:
+    enabled: true
+    lint: true          # Run ESLint to catch code issues
+    typecheck: true     # Run TypeScript compiler for type safety
+    vitest: true        # Run unit/integration tests with Vitest
+
+  # ---------------------------------------------------------------------------
+  # End-to-End Testing
+  # ---------------------------------------------------------------------------
+  # Disabled for non-deployable projects
+  e2e:
+    enabled: false      # No deployment means no E2E testing environment
+    # framework: playwright
+    # wait_for_deployment: false
+
+  # ---------------------------------------------------------------------------
+  # AI-Powered Code Reviews
+  # ---------------------------------------------------------------------------
+  # Claude Code reviews PRs based on configured rules and context
+  reviews:
+    enabled: true
+    requirements: true      # Check PR against project requirements
+    rules: true             # Enforce coding standards from .claude/rules/
+    project_memory: true    # Use project context for smarter reviews
+    agents: true            # Enable multi-agent review capabilities
+    skills: true            # Use specialized review skills
+    playwright_ui: false    # No UI review without a deployed preview
+
+  # ---------------------------------------------------------------------------
+  # Deployment Configuration
+  # ---------------------------------------------------------------------------
+  # Disabled for non-deployable projects
+  deployment:
+    enabled: false          # This project is not deployed
+    # vercel:
+    #   enabled: false
+    # supabase:
+    #   enabled: false
+    # cloudflare:
+    #   enabled: false
