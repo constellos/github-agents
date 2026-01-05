@@ -68,16 +68,20 @@ Output \`\`\`json {\"passed\": bool, \"summary\": \"...\", \"issues\": [{\"file\
       id: extract
       shell: bash
       run: |
+        # Initialize defaults - these will be used if parsing fails
+        PASSED="true"
+        RESULT='{"passed":true,"summary":"Review completed"}'
+
         EXEC="${{ steps.review.outputs.execution_file }}"
         if [ -f "$EXEC" ]; then
-          TEXT=$(jq -r '[.[] | select(.type=="assistant") | .message.content[]? | select(.type=="text") | .text] | last // ""' "$EXEC")
-          JSON=$(echo "$TEXT" | sed -n '/```json/,/```/{/```/d;p;}')
+          TEXT=$(jq -r '[.[] | select(.type=="assistant") | .message.content[]? | select(.type=="text") | .text] | last // ""' "$EXEC" 2>/dev/null || echo "")
+          JSON=$(echo "$TEXT" | sed -n '/```json/,/```/{/```/d;p;}' | head -50)
           if echo "$JSON" | jq . >/dev/null 2>&1; then
-            echo "$JSON" > /tmp/result.json
-            echo "passed=$(jq -r '.passed // true' /tmp/result.json)" >> $GITHUB_OUTPUT
-            echo "result=$(jq -c '.' /tmp/result.json)" >> $GITHUB_OUTPUT
-            exit 0
+            PASSED=$(echo "$JSON" | jq -r '.passed // true')
+            RESULT=$(echo "$JSON" | jq -c '.')
           fi
         fi
-        echo "passed=true" >> $GITHUB_OUTPUT
-        echo 'result={"passed":true,"summary":"Review completed"}' >> $GITHUB_OUTPUT
+
+        # Always output - never skip these lines
+        echo "passed=$PASSED" >> $GITHUB_OUTPUT
+        echo "result=$RESULT" >> $GITHUB_OUTPUT
