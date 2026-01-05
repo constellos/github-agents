@@ -100,48 +100,28 @@ runs:
         CHANGED="${{ steps.regression.outputs.changed }}"
         NEW="${{ steps.regression.outputs.new }}"
 
-        # Build context based on regression state
         case "$MSG_TYPE" in
           "regression")
-            CONTEXT="VISUAL REGRESSION DETECTED
-
-Changed screenshots: $CHANGED
-
-These screenshots differ from their previously approved versions.
-Verify if changes are intentional and align with requirements."
+            CONTEXT="VISUAL REGRESSION - Changed: $CHANGED"
             ;;
           "new")
-            CONTEXT="NEW SCREENSHOTS
-
-New screenshots: $NEW
-
-These are new visual captures that have not been reviewed before."
+            CONTEXT="NEW SCREENSHOTS - New: $NEW"
             ;;
           *)
-            CONTEXT="All screenshots match previously approved versions."
+            CONTEXT="All screenshots match approved versions"
             ;;
         esac
 
         if [ -f ".claude/agents/reviewers/visual.md" ]; then
           BASE_PROMPT=$(cat .claude/agents/reviewers/visual.md)
         else
-          BASE_PROMPT="# Visual Review
-
-Review screenshots in ${{ inputs.screenshots_dir }}/
-
-Evaluate:
-1. **Design Consistency** - Colors, typography, spacing
-2. **Accessibility** - Contrast, text size, focus indicators
-3. **Responsiveness** - Layout adaptation
-4. **Visual Polish** - Image quality, icon consistency"
+          BASE_PROMPT="# Visual Review - Screenshots in ${{ inputs.screenshots_dir }}/"
         fi
 
         FULL_PROMPT="$BASE_PROMPT
-
-## Regression Context
-$CONTEXT
-
-Output \`\`\`json {\"passed\": bool, \"summary\": \"...\", \"regressions\": [...], \"issues\": [...]} \`\`\`"
+        $CONTEXT
+        Evaluate: Design, Accessibility, Responsiveness
+        Output json {passed: bool, summary: ...}"
 
         echo "prompt<<ENDOFPROMPT" >> $GITHUB_OUTPUT
         echo "$FULL_PROMPT" >> $GITHUB_OUTPUT

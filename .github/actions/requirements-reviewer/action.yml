@@ -62,19 +62,18 @@ runs:
         else
           PROMPT="# Requirements Review
 
-Check if changes align with issue requirements.
-- Changed files: .claude/review-context/changed.txt
-- Issue context: .claude/review-context/issue.json
+        Check if changes align with issue requirements.
+        - Changed files: .claude/review-context/changed.txt
+        - Issue context: .claude/review-context/issue.json
 
-Evaluate:
-1. All acceptance criteria addressed
-2. Changes within issue scope
-3. No scope creep
+        Evaluate:
+        1. All acceptance criteria addressed
+        2. Changes within issue scope
+        3. No scope creep
 
-Output \`\`\`json {\"passed\": bool, \"summary\": \"...\", \"requirements_met\": [...], \"requirements_missing\": [...]} \`\`\`"
+        Output json {passed: bool, summary: ...}"
         fi
 
-        # Use heredoc for multiline output
         echo "prompt<<ENDOFPROMPT" >> $GITHUB_OUTPUT
         echo "$PROMPT" >> $GITHUB_OUTPUT
         echo "ENDOFPROMPT" >> $GITHUB_OUTPUT

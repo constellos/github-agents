@@ -70,60 +70,19 @@ runs:
         if [ -f ".claude/agents/reviewers/ux.md" ]; then
           BASE_PROMPT=$(cat .claude/agents/reviewers/ux.md)
         else
-          BASE_PROMPT="# UX Review
-
-Analyze the PR for user experience issues.
-
-## Evaluation Criteria
-
-1. **Error Handling**
-   - Console errors in E2E results
-   - User-facing error messages
-   - Recovery flows
-
-2. **Interactivity**
-   - Click/tap responsiveness patterns
-   - Form validation timing
-   - Feedback for user actions
-
-3. **Performance Perception**
-   - Loading indicators present
-   - Skeleton screens for async content
-   - Progressive enhancement
-
-4. **Navigation**
-   - Information architecture
-   - Back button behavior
-   - Deep linking support
-
-5. **Accessibility Behavior**
-   - Keyboard navigation
-   - Focus management
-   - Screen reader hints"
+          BASE_PROMPT="# UX Review - Analyze PR for UX issues"
         fi
 
-        # Add console errors context if any
         if [ -n "$CONSOLE_ERRORS" ]; then
-          CONTEXT="## Console Errors Detected
-
-\`\`\`
-$CONSOLE_ERRORS
-\`\`\`
-
-Please analyze these errors and their impact on UX."
+          CONTEXT="Console errors detected - please analyze"
         else
-          CONTEXT="No console errors detected in E2E results."
+          CONTEXT="No console errors detected"
         fi
 
         FULL_PROMPT="$BASE_PROMPT
-
-$CONTEXT
-
-## Input Files
-- Changed files: .claude/review-context/changed.txt
-- Console errors: .claude/review-context/console_errors.txt
-
-Output \`\`\`json {\"passed\": bool, \"summary\": \"...\", \"issues\": [{\"severity\": \"high|medium|low\", \"category\": \"...\", \"description\": \"...\"}], \"console_errors\": [...]} \`\`\`"
+        $CONTEXT
+        Changed files: .claude/review-context/changed.txt
+        Output json {passed: bool, summary: ...}"
 
         echo "prompt<<ENDOFPROMPT" >> $GITHUB_OUTPUT
         echo "$FULL_PROMPT" >> $GITHUB_OUTPUT

@@ -39,16 +39,9 @@ runs:
           PROMPT=$(cat .claude/agents/reviewers/code-quality.md)
         else
           PROMPT="# Code Quality Review
-
-Evaluate code quality for files in .claude/review-context/changed.txt
-
-Criteria:
-1. **DRY** - Code duplication, reusable abstractions
-2. **YAGNI** - Premature optimization, unused code
-3. **Modularity** - Single responsibility, clear interfaces
-4. **Maintainability** - Code clarity, naming conventions
-
-Output \`\`\`json {\"passed\": bool, \"summary\": \"...\", \"issues\": [{\"file\": \"...\", \"line\": N, \"severity\": \"high|medium|low\", \"description\": \"...\"}]} \`\`\`"
+        Evaluate code quality for files in .claude/review-context/changed.txt
+        Criteria: DRY, YAGNI, Modularity, Maintainability
+        Output json {passed: bool, summary: ...}"
         fi
 
         echo "prompt<<ENDOFPROMPT" >> $GITHUB_OUTPUT

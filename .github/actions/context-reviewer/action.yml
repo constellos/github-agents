@@ -55,16 +55,10 @@ runs:
           PROMPT=$(cat .claude/agents/reviewers/context.md)
         else
           PROMPT="# Context Review
-
-Check changes against CLAUDE.md files listed in .claude/review-context/claude_files.txt
-Changed files: .claude/review-context/changed.txt
-
-Evaluate:
-1. Follows documented patterns
-2. Respects architectural decisions
-3. Documentation updated if needed
-
-Output \`\`\`json {\"passed\": bool, \"summary\": \"...\", \"violations\": [{\"file\": \"...\", \"rule\": \"...\", \"description\": \"...\"}]} \`\`\`"
+        Check changes against CLAUDE.md files in .claude/review-context/claude_files.txt
+        Changed files: .claude/review-context/changed.txt
+        Evaluate: Follows patterns, respects architecture, docs updated
+        Output json {passed: bool, summary: ...}"
         fi
 
         echo "prompt<<ENDOFPROMPT" >> $GITHUB_OUTPUT
