@@ -1,5 +1,9 @@
 name: UX Reviewer
-description: Review PR for UX issues - console errors, interactivity, behavior
+description: AI UX review for interactivity, console errors, behavior
+
+branding:
+  icon: 'check-circle'
+  color: 'purple'
 
 inputs:
   claude_code_oauth_token:

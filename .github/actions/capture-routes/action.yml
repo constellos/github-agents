@@ -1,6 +1,10 @@
 name: Capture Routes
 description: Discover Playwright-visited routes and capture screenshots
 
+branding:
+  icon: 'camera'
+  color: 'orange'
+
 inputs:
   screenshots_dir:
     description: 'Directory to store screenshots'

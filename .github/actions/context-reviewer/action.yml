@@ -1,5 +1,9 @@
 name: Context Reviewer
-description: Review PR changes against CLAUDE.md context files
+description: AI review against CLAUDE.md context files using Claude
+
+branding:
+  icon: 'check-circle'
+  color: 'purple'
 
 inputs:
   claude_code_oauth_token:

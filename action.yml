@@ -1,0 +1,46 @@
+name: 'Claude Code Review Actions'
+description: 'AI-powered code review using Claude - modular review actions for PR quality'
+author: 'Constellos'
+
+branding:
+  icon: 'check-circle'
+  color: 'purple'
+
+inputs:
+  review_type:
+    description: 'Type of review (requirements, code-quality, context, visual, ux)'
+    required: false
+    default: 'requirements'
+  claude_code_oauth_token:
+    description: 'Claude Code OAuth token'
+    required: true
+  pr_number:
+    description: 'Pull request number'
+    required: true
+  branch:
+    description: 'Branch name (for requirements review issue extraction)'
+    required: false
+  github_token:
+    description: 'GitHub token'
+    required: false
+    default: ${{ github.token }}
+
+outputs:
+  passed:
+    description: 'Whether review passed'
+    value: ${{ steps.review.outputs.passed }}
+  result:
+    description: 'JSON review result'
+    value: ${{ steps.review.outputs.result }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Route to specific reviewer
+      id: review
+      uses: ./.github/actions/${{ inputs.review_type }}-reviewer
+      with:
+        claude_code_oauth_token: ${{ inputs.claude_code_oauth_token }}
+        pr_number: ${{ inputs.pr_number }}
+        branch: ${{ inputs.branch }}
+        github_token: ${{ inputs.github_token }}
