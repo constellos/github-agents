@@ -1,6 +1,10 @@
 name: Update Review Comment
 description: Add or update a row in the consolidated CI review comment
 
+branding:
+  icon: 'message-square'
+  color: 'green'
+
 inputs:
   review_name:
     description: 'Name of the review (e.g., "Requirements", "Visual")'

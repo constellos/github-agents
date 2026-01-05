@@ -1,5 +1,9 @@
 name: Code Quality Reviewer
-description: Review PR code quality using Claude (DRY, YAGNI, modularity)
+description: AI code quality review for DRY, YAGNI, modularity using Claude
+
+branding:
+  icon: 'check-circle'
+  color: 'purple'
 
 inputs:
   claude_code_oauth_token:

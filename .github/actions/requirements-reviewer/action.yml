@@ -1,5 +1,9 @@
 name: Requirements Reviewer
-description: Review PR changes against issue requirements using Claude
+description: AI-powered PR review against issue requirements using Claude
+
+branding:
+  icon: 'check-circle'
+  color: 'purple'
 
 inputs:
   claude_code_oauth_token:

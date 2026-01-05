@@ -1,5 +1,9 @@
 name: Visual Reviewer
-description: Review UI screenshots for design, accessibility, and visual regression
+description: AI visual design & accessibility review with screenshot analysis
+
+branding:
+  icon: 'eye'
+  color: 'blue'
 
 inputs:
   claude_code_oauth_token:

@@ -1,0 +1,55 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [1.0.0] - 2026-01-05
+
+### Added
+- Initial marketplace release
+- 8 composite actions for comprehensive PR reviews:
+  - `requirements-reviewer` - AI-powered review against issue requirements
+  - `code-quality-reviewer` - Code quality analysis (DRY, YAGNI, modularity)
+  - `context-reviewer` - Validation against CLAUDE.md context files
+  - `visual-reviewer` - Visual design & accessibility review with screenshot analysis
+  - `ux-reviewer` - UX review for interactivity and console errors
+  - `review-comment` - Consolidated PR comment management
+  - `changed-files` - Smart file change detection
+  - `capture-routes` - Route discovery and screenshot capture from Playwright
+- Root-level `action.yml` dispatcher for simplified usage
+- Comprehensive documentation in README.md
+- GitHub Marketplace branding for all actions
+- Custom review prompt support via `.claude/agents/reviewers/` directory
+- Visual regression detection using SHA256 hashes
+- Automatic console error extraction from E2E results
+
+### Fixed
+- Use `.claude/review-context/` instead of `/tmp/` to avoid sandboxing issues
+- Proper heredoc syntax in all shell scripts
+- Always output results to prevent workflow stalling
+- Graceful handling of missing files (no screenshots, no CLAUDE.md, etc.)
+
+### Changed
+- Moved from inline workflow logic to modular composite actions
+- Enhanced descriptions for marketplace visibility
+- Improved error handling with fail-safe defaults
+
+### Security
+- All file operations use project-local directories (`.claude/`)
+- No external network calls except to GitHub API
+- Secrets properly scoped to required actions only
+
+## [Unreleased]
+
+### Planned
+- Turborepo/monorepo workspace filtering support
+- Performance benchmarking reviewer
+- Security vulnerability reviewer
+- Automated visual approval workflow
+- Multi-language support (Python, Go, Rust)
+
+---
+
+[1.0.0]: https://github.com/constellos/claude-code-actions/releases/tag/v1.0.0

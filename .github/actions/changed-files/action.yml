@@ -1,6 +1,10 @@
 name: Detect Changed Files
 description: Smart file change detection for efficient CI
 
+branding:
+  icon: 'file-text'
+  color: 'gray'
+
 inputs:
   pattern:
     description: 'Regex pattern to filter files'
