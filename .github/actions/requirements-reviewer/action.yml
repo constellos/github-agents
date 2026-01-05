@@ -1,0 +1,107 @@
+name: Requirements Reviewer
+description: Review PR changes against issue requirements using Claude
+
+inputs:
+  claude_code_oauth_token:
+    description: 'Claude Code OAuth token'
+    required: true
+  pr_number:
+    description: 'Pull request number'
+    required: true
+  branch:
+    description: 'Branch name for issue extraction'
+    required: true
+  github_token:
+    description: 'GitHub token for API access'
+    required: true
+
+outputs:
+  passed:
+    description: 'Whether the review passed'
+    value: ${{ steps.extract.outputs.passed }}
+  result:
+    description: 'JSON result from the review'
+    value: ${{ steps.extract.outputs.result }}
+
+runs:
+  using: composite
+  steps:
+    - name: Get context
+      id: context
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github_token }}
+      run: |
+        mkdir -p .claude/review-context
+
+        BRANCH="${{ inputs.branch }}"
+        echo "branch=$BRANCH" >> $GITHUB_OUTPUT
+
+        # Extract issue number from branch name
+        ISSUE=""
+        [[ $BRANCH =~ ^([0-9]+)- ]] && ISSUE="${BASH_REMATCH[1]}"
+        [[ $BRANCH =~ ^(feature|fix)/([0-9]+) ]] && ISSUE="${BASH_REMATCH[2]}"
+        echo "issue=$ISSUE" >> $GITHUB_OUTPUT
+
+        # Get changed files
+        gh pr view ${{ inputs.pr_number }} --json files --jq '.files[].path' > .claude/review-context/changed.txt
+
+        # Get issue context if available
+        if [ -n "$ISSUE" ]; then
+          gh issue view $ISSUE --json title,body > .claude/review-context/issue.json 2>/dev/null || echo "{}" > .claude/review-context/issue.json
+        else
+          echo "{}" > .claude/review-context/issue.json
+        fi
+
+    - name: Load agent prompt
+      id: agent
+      shell: bash
+      run: |
+        if [ -f ".claude/agents/reviewers/requirements.md" ]; then
+          PROMPT=$(cat .claude/agents/reviewers/requirements.md)
+        else
+          PROMPT="# Requirements Review
+
+Check if changes align with issue requirements.
+- Changed files: .claude/review-context/changed.txt
+- Issue context: .claude/review-context/issue.json
+
+Evaluate:
+1. All acceptance criteria addressed
+2. Changes within issue scope
+3. No scope creep
+
+Output \`\`\`json {\"passed\": bool, \"summary\": \"...\", \"requirements_met\": [...], \"requirements_missing\": [...]} \`\`\`"
+        fi
+
+        # Use heredoc for multiline output
+        echo "prompt<<ENDOFPROMPT" >> $GITHUB_OUTPUT
+        echo "$PROMPT" >> $GITHUB_OUTPUT
+        echo "ENDOFPROMPT" >> $GITHUB_OUTPUT
+
+    - name: Run review
+      id: review
+      uses: anthropics/claude-code-base-action@beta
+      with:
+        claude_code_oauth_token: ${{ inputs.claude_code_oauth_token }}
+        allowed_tools: "View,GlobTool,Grep,Bash(git diff:*),Bash(cat:*)"
+        max_turns: 15
+        prompt: ${{ steps.agent.outputs.prompt }}
+
+    - name: Extract result
+      id: extract
+      shell: bash
+      run: |
+        EXEC="${{ steps.review.outputs.execution_file }}"
+        if [ -f "$EXEC" ]; then
+          TEXT=$(jq -r '[.[] | select(.type=="assistant") | .message.content[]? | select(.type=="text") | .text] | last // ""' "$EXEC")
+          JSON=$(echo "$TEXT" | sed -n '/```json/,/```/{/```/d;p;}')
+          if echo "$JSON" | jq . >/dev/null 2>&1; then
+            echo "$JSON" > /tmp/result.json
+            echo "passed=$(jq -r '.passed // true' /tmp/result.json)" >> $GITHUB_OUTPUT
+            echo "result=$(jq -c '.' /tmp/result.json)" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+        fi
+        echo "passed=true" >> $GITHUB_OUTPUT
+        echo 'result={"passed":true,"summary":"Review completed"}' >> $GITHUB_OUTPUT

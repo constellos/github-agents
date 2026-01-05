@@ -1,0 +1,60 @@
+name: Update Review Comment
+description: Add or update a row in the consolidated CI review comment
+
+inputs:
+  review_name:
+    description: 'Name of the review (e.g., "Requirements", "Visual")'
+    required: true
+  passed:
+    description: 'Whether the review passed (true/false)'
+    required: true
+  result_json:
+    description: 'JSON result from the review with summary field'
+    required: true
+  pr_number:
+    description: 'Pull request number'
+    required: true
+  sha:
+    description: 'Commit SHA for unique comment marker'
+    required: true
+  github_token:
+    description: 'GitHub token for API access'
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Update review comment
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github_token }}
+      run: |
+        MARKER="<!-- ci-review-${{ inputs.sha }} -->"
+        PR="${{ inputs.pr_number }}"
+        REVIEW="${{ inputs.review_name }}"
+        PASSED="${{ inputs.passed }}"
+        RESULT='${{ inputs.result_json }}'
+
+        STATUS="✓"
+        [ "$PASSED" != "true" ] && STATUS="✗"
+        SUMMARY=$(echo "$RESULT" | jq -r '.summary // "N/A"' 2>/dev/null || echo "N/A")
+
+        ROW="| $REVIEW | $STATUS | $SUMMARY |"
+
+        # Check for existing comment
+        EXISTING=$(gh api "/repos/${{ github.repository }}/issues/$PR/comments" \
+          --jq ".[] | select(.body | contains(\"$MARKER\")) | {id: .id, body: .body}" | head -1)
+
+        if [ -n "$EXISTING" ]; then
+          COMMENT_ID=$(echo "$EXISTING" | jq -r '.id')
+          OLD_BODY=$(echo "$EXISTING" | jq -r '.body')
+          # Remove existing row for this review and add new one
+          NEW_BODY=$(echo "$OLD_BODY" | sed "/^| $REVIEW |/d")
+          # Insert new row before footer
+          NEW_BODY=$(echo "$NEW_BODY" | sed "/^---$/i\\$ROW")
+          gh api --method PATCH "/repos/${{ github.repository }}/issues/comments/$COMMENT_ID" -f body="$NEW_BODY"
+        else
+          # Create new comment
+          COMMENT=$(printf '%s\n## Reviews\n\n| Review | Status | Summary |\n|--------|--------|---------|\n%s\n\n---\n*Claude Code CI*' "$MARKER" "$ROW")
+          gh pr comment "$PR" --body "$COMMENT"
+        fi

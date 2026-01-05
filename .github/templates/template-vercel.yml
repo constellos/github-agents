@@ -42,7 +42,8 @@ ci:
     project_memory: true    # Use project context for smarter reviews
     agents: true            # Enable multi-agent review capabilities
     skills: true            # Use specialized review skills
-    playwright_ui: true     # AI reviews UI changes via Playwright screenshots
+    visual: true            # AI reviews screenshots for design/accessibility
+    ux: true                # AI reviews for UX issues and console errors
 
   # ---------------------------------------------------------------------------
   # Deployment Configuration

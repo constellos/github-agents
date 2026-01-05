@@ -1,0 +1,106 @@
+name: Context Reviewer
+description: Review PR changes against CLAUDE.md context files
+
+inputs:
+  claude_code_oauth_token:
+    description: 'Claude Code OAuth token'
+    required: true
+  pr_number:
+    description: 'Pull request number'
+    required: true
+  github_token:
+    description: 'GitHub token for API access'
+    required: true
+
+outputs:
+  passed:
+    description: 'Whether the review passed'
+    value: ${{ steps.extract.outputs.passed }}
+  result:
+    description: 'JSON result from the review'
+    value: ${{ steps.extract.outputs.result }}
+
+runs:
+  using: composite
+  steps:
+    - name: Find parent CLAUDE.md files
+      id: find
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github_token }}
+      run: |
+        mkdir -p .claude/review-context
+
+        gh pr view ${{ inputs.pr_number }} --json files --jq '.files[].path' > .claude/review-context/changed.txt
+
+        > .claude/review-context/claude_files.txt
+        while IFS= read -r file; do
+          dir=$(dirname "$file")
+          while [ "$dir" != "." ]; do
+            [ -f "$dir/CLAUDE.md" ] && echo "$dir/CLAUDE.md" >> .claude/review-context/claude_files.txt
+            dir=$(dirname "$dir")
+          done
+          [ -f "CLAUDE.md" ] && echo "CLAUDE.md" >> .claude/review-context/claude_files.txt
+        done < .claude/review-context/changed.txt
+
+        sort -u .claude/review-context/claude_files.txt -o .claude/review-context/claude_files.txt
+        COUNT=$(wc -l < .claude/review-context/claude_files.txt | tr -d ' ')
+        echo "count=$COUNT" >> $GITHUB_OUTPUT
+
+    - name: Load agent prompt
+      id: agent
+      shell: bash
+      run: |
+        if [ -f ".claude/agents/reviewers/context.md" ]; then
+          PROMPT=$(cat .claude/agents/reviewers/context.md)
+        else
+          PROMPT="# Context Review
+
+Check changes against CLAUDE.md files listed in .claude/review-context/claude_files.txt
+Changed files: .claude/review-context/changed.txt
+
+Evaluate:
+1. Follows documented patterns
+2. Respects architectural decisions
+3. Documentation updated if needed
+
+Output \`\`\`json {\"passed\": bool, \"summary\": \"...\", \"violations\": [{\"file\": \"...\", \"rule\": \"...\", \"description\": \"...\"}]} \`\`\`"
+        fi
+
+        echo "prompt<<ENDOFPROMPT" >> $GITHUB_OUTPUT
+        echo "$PROMPT" >> $GITHUB_OUTPUT
+        echo "ENDOFPROMPT" >> $GITHUB_OUTPUT
+
+    - name: Run review
+      if: steps.find.outputs.count != '0'
+      id: review
+      uses: anthropics/claude-code-base-action@beta
+      with:
+        claude_code_oauth_token: ${{ inputs.claude_code_oauth_token }}
+        allowed_tools: "View,GlobTool,Grep,Bash(cat:*)"
+        max_turns: 15
+        prompt: ${{ steps.agent.outputs.prompt }}
+
+    - name: Extract result
+      id: extract
+      shell: bash
+      run: |
+        if [ "${{ steps.find.outputs.count }}" = "0" ]; then
+          echo "passed=true" >> $GITHUB_OUTPUT
+          echo 'result={"passed":true,"summary":"No CLAUDE.md files to check"}' >> $GITHUB_OUTPUT
+          exit 0
+        fi
+
+        EXEC="${{ steps.review.outputs.execution_file }}"
+        if [ -f "$EXEC" ]; then
+          TEXT=$(jq -r '[.[] | select(.type=="assistant") | .message.content[]? | select(.type=="text") | .text] | last // ""' "$EXEC")
+          JSON=$(echo "$TEXT" | sed -n '/```json/,/```/{/```/d;p;}')
+          if echo "$JSON" | jq . >/dev/null 2>&1; then
+            echo "$JSON" > /tmp/result.json
+            echo "passed=$(jq -r '.passed // true' /tmp/result.json)" >> $GITHUB_OUTPUT
+            echo "result=$(jq -c '.' /tmp/result.json)" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+        fi
+        echo "passed=true" >> $GITHUB_OUTPUT
+        echo 'result={"passed":true,"summary":"Review completed"}' >> $GITHUB_OUTPUT

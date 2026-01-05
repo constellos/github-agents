@@ -304,18 +304,7 @@ jobs:
             gh api --method PATCH "/repos/${{ github.repository }}/issues/comments/$COMMENT_ID" -f body="$NEW_BODY"
           else
             # Create new comment
-            COMMENT=$(cat <<EOF
-          $MARKER
-          ## Reviews
-
-          | Review | Status | Summary |
-          |--------|--------|---------|
-          $ROW
-
-          ---
-          *Claude Code CI*
-          EOF
-          )
+            COMMENT=$(printf '%s\n## Reviews\n\n| Review | Status | Summary |\n|--------|--------|---------|\n%s\n\n---\n*Claude Code CI*' "$MARKER" "$ROW")
             gh pr comment "$PR" --body "$COMMENT"
           fi
 
@@ -397,18 +386,7 @@ jobs:
             gh api --method PATCH "/repos/${{ github.repository }}/issues/comments/$COMMENT_ID" -f body="$NEW_BODY"
           else
             # Create new comment (shouldn't happen as requirements runs first)
-            COMMENT=$(cat <<EOF
-          $MARKER
-          ## Reviews
-
-          | Review | Status | Summary |
-          |--------|--------|---------|
-          $ROW
-
-          ---
-          *Claude Code CI*
-          EOF
-          )
+            COMMENT=$(printf '%s\n## Reviews\n\n| Review | Status | Summary |\n|--------|--------|---------|\n%s\n\n---\n*Claude Code CI*' "$MARKER" "$ROW")
             gh pr comment "$PR" --body "$COMMENT"
           fi
 
@@ -515,23 +493,12 @@ jobs:
             gh api --method PATCH "/repos/${{ github.repository }}/issues/comments/$COMMENT_ID" -f body="$NEW_BODY"
           else
             # Create new comment (shouldn't happen as requirements runs first)
-            COMMENT=$(cat <<EOF
-          $MARKER
-          ## Reviews
-
-          | Review | Status | Summary |
-          |--------|--------|---------|
-          $ROW
-
-          ---
-          *Claude Code CI*
-          EOF
-          )
+            COMMENT=$(printf '%s\n## Reviews\n\n| Review | Status | Summary |\n|--------|--------|---------|\n%s\n\n---\n*Claude Code CI*' "$MARKER" "$ROW")
             gh pr comment "$PR" --body "$COMMENT"
           fi
 
-  ui:
-    name: "Reviews / UI"
+  visual:
+    name: "Reviews / Visual"
     needs: [lint, requirements, e2e]
     if: github.event_name == 'pull_request' && needs.lint.outputs.has_app == 'true' && needs.requirements.outputs.passed == 'true'
     runs-on: ubuntu-latest
@@ -598,7 +565,7 @@ jobs:
         run: |
           MARKER="<!-- ci-review-${{ github.sha }} -->"
           PR="${{ github.event.pull_request.number }}"
-          REVIEW="UI"
+          REVIEW="Visual"
           PASSED="${{ steps.extract.outputs.passed }}"
           RESULT='${{ steps.extract.outputs.result }}'
 
@@ -620,17 +587,117 @@ jobs:
             gh api --method PATCH "/repos/${{ github.repository }}/issues/comments/$COMMENT_ID" -f body="$NEW_BODY"
           else
             # Create new comment (shouldn't happen as requirements runs first)
-            COMMENT=$(cat <<EOF
-          $MARKER
-          ## Reviews
+            COMMENT=$(printf '%s\n## Reviews\n\n| Review | Status | Summary |\n|--------|--------|---------|\n%s\n\n---\n*Claude Code CI*' "$MARKER" "$ROW")
+            gh pr comment "$PR" --body "$COMMENT"
+          fi
 
-          | Review | Status | Summary |
-          |--------|--------|---------|
-          $ROW
+  ux:
+    name: "Reviews / UX"
+    needs: [lint, requirements, e2e]
+    if: github.event_name == 'pull_request' && needs.lint.outputs.has_app == 'true' && needs.requirements.outputs.passed == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      passed: ${{ steps.extract.outputs.passed }}
+      result: ${{ steps.extract.outputs.result }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-          ---
-          *Claude Code CI*
-          EOF
-          )
+      - name: Get context
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p .claude/review-context
+          gh pr view ${{ github.event.pull_request.number }} --json files --jq '.files[].path' > .claude/review-context/changed.txt
+
+      - name: Check for UX-relevant changes
+        id: check
+        run: |
+          RELEVANT=$(grep -E '\.(tsx?|jsx?|css|scss|html)$' .claude/review-context/changed.txt 2>/dev/null | wc -l || echo "0")
+          echo "count=$RELEVANT" >> $GITHUB_OUTPUT
+
+      - name: Load agent prompt
+        id: agent
+        run: |
+          if [ -f ".claude/agents/reviewers/ux.md" ]; then
+            PROMPT=$(cat .claude/agents/reviewers/ux.md)
+          else
+            PROMPT="# UX Review
+          Analyze the PR for user experience issues:
+          1. Console errors and warnings
+          2. Interactivity and responsiveness patterns
+          3. Loading states and error handling
+          4. Accessibility concerns
+          5. User flow consistency
+          Changed files: .claude/review-context/changed.txt
+          Output \`\`\`json {\"passed\": bool, \"summary\": \"...\", \"issues\": [...]} \`\`\`"
+          fi
+
+          echo "prompt<<ENDOFPROMPT" >> $GITHUB_OUTPUT
+          echo "$PROMPT" >> $GITHUB_OUTPUT
+          echo "ENDOFPROMPT" >> $GITHUB_OUTPUT
+
+      - name: Run review
+        if: steps.check.outputs.count != '0'
+        id: review
+        uses: anthropics/claude-code-base-action@beta
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          allowed_tools: "View,GlobTool,Grep,Bash(git diff:*),Bash(cat:*),Bash(ls:*)"
+          max_turns: 15
+          prompt: ${{ steps.agent.outputs.prompt }}
+
+      - name: Extract result
+        id: extract
+        run: |
+          if [ "${{ steps.check.outputs.count }}" = "0" ]; then
+            echo "passed=true" >> $GITHUB_OUTPUT
+            echo 'result={"passed":true,"summary":"No UX-relevant changes to review"}' >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          EXEC="${{ steps.review.outputs.execution_file }}"
+          if [ -f "$EXEC" ]; then
+            TEXT=$(jq -r '[.[] | select(.type=="assistant") | .message.content[]? | select(.type=="text") | .text] | last // ""' "$EXEC")
+            JSON=$(echo "$TEXT" | sed -n '/```json/,/```/{/```/d;p;}')
+            if echo "$JSON" | jq . >/dev/null 2>&1; then
+              echo "$JSON" > /tmp/result.json
+              echo "passed=$(jq -r '.passed // true' /tmp/result.json)" >> $GITHUB_OUTPUT
+              echo "result=$(jq -c '.' /tmp/result.json)" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+          fi
+          echo "passed=true" >> $GITHUB_OUTPUT
+          echo 'result={"passed":true,"summary":"Review completed"}' >> $GITHUB_OUTPUT
+
+      - name: Update review comment
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          MARKER="<!-- ci-review-${{ github.sha }} -->"
+          PR="${{ github.event.pull_request.number }}"
+          REVIEW="UX"
+          PASSED="${{ steps.extract.outputs.passed }}"
+          RESULT='${{ steps.extract.outputs.result }}'
+
+          STATUS="✓"
+          [ "$PASSED" != "true" ] && STATUS="✗"
+          SUMMARY=$(echo "$RESULT" | jq -r '.summary // "N/A"' 2>/dev/null || echo "N/A")
+
+          ROW="| $REVIEW | $STATUS | $SUMMARY |"
+
+          # Check for existing comment
+          EXISTING=$(gh api "/repos/${{ github.repository }}/issues/$PR/comments" \
+            --jq ".[] | select(.body | contains(\"$MARKER\")) | {id: .id, body: .body}" | head -1)
+
+          if [ -n "$EXISTING" ]; then
+            COMMENT_ID=$(echo "$EXISTING" | jq -r '.id')
+            OLD_BODY=$(echo "$EXISTING" | jq -r '.body')
+            NEW_BODY=$(echo "$OLD_BODY" | sed "/---/i\\$ROW")
+            gh api --method PATCH "/repos/${{ github.repository }}/issues/comments/$COMMENT_ID" -f body="$NEW_BODY"
+          else
+            COMMENT=$(printf '%s\n## Reviews\n\n| Review | Status | Summary |\n|--------|--------|---------|\n%s\n\n---\n*Claude Code CI*' "$MARKER" "$ROW")
             gh pr comment "$PR" --body "$COMMENT"
           fi

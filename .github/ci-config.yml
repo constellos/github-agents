@@ -2,7 +2,7 @@
 # Template for Claude Code repos
 
 ci:
-  # Set to true if this repo has an app (enables E2E + UI review)
+  # Set to true if this repo has an app (enables E2E + Visual/UX reviews)
   has_app: false
 
   # Static Analysis: Lint (ESLint) + Types (TypeScript)
@@ -16,11 +16,12 @@ ci:
     unit: true
     e2e: true
 
-  # Reviews: Requirements, Code Quality, Context, UI
+  # Reviews: Requirements, Code Quality, Context, Visual, UX
   # Requirements must pass before others run
-  # UI only runs if has_app: true and screenshots exist
+  # Visual/UX only run if has_app: true
   reviews:
     requirements: true
     code_quality: true
     context: true
-    ui: true
+    visual: true
+    ux: true

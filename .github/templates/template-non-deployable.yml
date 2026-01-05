@@ -45,7 +45,8 @@ ci:
     project_memory: true    # Use project context for smarter reviews
     agents: true            # Enable multi-agent review capabilities
     skills: true            # Use specialized review skills
-    playwright_ui: false    # No UI review without a deployed preview
+    visual: false           # No visual review without a deployed preview
+    ux: false               # No UX review without a deployed preview
 
   # ---------------------------------------------------------------------------
   # Deployment Configuration

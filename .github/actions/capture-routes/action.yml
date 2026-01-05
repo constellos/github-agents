@@ -1,0 +1,189 @@
+name: Capture Routes
+description: Discover Playwright-visited routes and capture screenshots
+
+inputs:
+  screenshots_dir:
+    description: 'Directory to store screenshots'
+    required: false
+    default: '.claude-review/screenshots'
+  max_routes:
+    description: 'Maximum number of routes to capture'
+    required: false
+    default: '10'
+  har_path:
+    description: 'Path to HAR file or directory containing HAR files'
+    required: false
+    default: 'test-results'
+  trace_path:
+    description: 'Path to trace files'
+    required: false
+    default: 'test-results'
+  base_url:
+    description: 'Base URL for screenshots (auto-detected if not provided)'
+    required: false
+    default: ''
+
+outputs:
+  routes:
+    description: 'Newline-separated list of discovered routes'
+    value: ${{ steps.discover.outputs.routes }}
+  route_count:
+    description: 'Number of routes discovered'
+    value: ${{ steps.discover.outputs.count }}
+  screenshots:
+    description: 'Newline-separated list of screenshot paths'
+    value: ${{ steps.capture.outputs.screenshots }}
+  screenshot_count:
+    description: 'Number of screenshots captured'
+    value: ${{ steps.capture.outputs.count }}
+
+runs:
+  using: composite
+  steps:
+    - name: Discover routes from Playwright artifacts
+      id: discover
+      shell: bash
+      run: |
+        mkdir -p ${{ inputs.screenshots_dir }}
+        ROUTES_FILE=$(mktemp)
+
+        # Try to extract URLs from HAR files
+        if [ -d "${{ inputs.har_path }}" ]; then
+          find "${{ inputs.har_path }}" -name "*.har" -exec cat {} \; 2>/dev/null | \
+            jq -r '.log.entries[]?.request.url // empty' 2>/dev/null | \
+            grep -E '^https?://' | \
+            sed 's/[?#].*//' | \
+            sort -u >> "$ROUTES_FILE" || true
+        fi
+
+        # Try to extract URLs from trace files
+        if [ -d "${{ inputs.trace_path }}" ]; then
+          find "${{ inputs.trace_path }}" -name "*.zip" -exec unzip -p {} trace.network 2>/dev/null \; | \
+            jq -r '.[]?.url // empty' 2>/dev/null | \
+            grep -E '^https?://' | \
+            sed 's/[?#].*//' | \
+            sort -u >> "$ROUTES_FILE" || true
+        fi
+
+        # Filter to page navigations (exclude static assets)
+        FILTERED=$(cat "$ROUTES_FILE" | \
+          grep -vE '\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|map)$' | \
+          grep -vE '/_next/|/__nextjs|/api/' | \
+          sort -u | \
+          head -n ${{ inputs.max_routes }})
+
+        # Extract paths from URLs
+        ROUTES=""
+        BASE_URL="${{ inputs.base_url }}"
+
+        if [ -n "$FILTERED" ]; then
+          # Auto-detect base URL from first URL if not provided
+          if [ -z "$BASE_URL" ]; then
+            FIRST_URL=$(echo "$FILTERED" | head -1)
+            BASE_URL=$(echo "$FIRST_URL" | sed -E 's|(https?://[^/]+).*|\1|')
+          fi
+
+          ROUTES=$(echo "$FILTERED" | sed -E "s|$BASE_URL||" | sort -u)
+          # Ensure root is included
+          ROUTES=$(echo -e "/\n$ROUTES" | sort -u | head -n ${{ inputs.max_routes }})
+        else
+          # Fallback to common routes
+          ROUTES=$(echo -e "/\n/login\n/dashboard\n/settings")
+        fi
+
+        COUNT=$(echo "$ROUTES" | grep -c . || echo "0")
+
+        echo "base_url=$BASE_URL" >> $GITHUB_OUTPUT
+        echo "count=$COUNT" >> $GITHUB_OUTPUT
+        echo "routes<<EOF" >> $GITHUB_OUTPUT
+        echo "$ROUTES" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+
+        rm -f "$ROUTES_FILE"
+
+    - name: Detect base URL
+      id: detect_url
+      shell: bash
+      run: |
+        BASE_URL="${{ inputs.base_url }}"
+
+        if [ -z "$BASE_URL" ]; then
+          # Try playwright.config.ts
+          if [ -f "playwright.config.ts" ]; then
+            BASE_URL=$(grep -oP "baseURL:\s*['\"]\\K[^'\"]*" playwright.config.ts 2>/dev/null || echo "")
+          fi
+
+          # Try playwright.config.js
+          if [ -z "$BASE_URL" ] && [ -f "playwright.config.js" ]; then
+            BASE_URL=$(grep -oP "baseURL:\s*['\"]\\K[^'\"]*" playwright.config.js 2>/dev/null || echo "")
+          fi
+
+          # Use discovered base URL
+          if [ -z "$BASE_URL" ]; then
+            BASE_URL="${{ steps.discover.outputs.base_url }}"
+          fi
+        fi
+
+        echo "base_url=$BASE_URL" >> $GITHUB_OUTPUT
+
+    - name: Capture screenshots
+      id: capture
+      shell: bash
+      run: |
+        BASE_URL="${{ steps.detect_url.outputs.base_url }}"
+        ROUTES="${{ steps.discover.outputs.routes }}"
+        SCREENSHOTS_DIR="${{ inputs.screenshots_dir }}"
+
+        if [ -z "$BASE_URL" ]; then
+          echo "No base URL available, skipping screenshot capture"
+          echo "count=0" >> $GITHUB_OUTPUT
+          echo "screenshots=" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+
+        # Install playwright if needed
+        if ! command -v npx &> /dev/null || ! npx playwright --version &> /dev/null; then
+          npm install playwright --no-save 2>/dev/null || true
+        fi
+
+        npx playwright install chromium --with-deps 2>/dev/null || true
+
+        SCREENSHOTS=""
+        COUNT=0
+
+        # Capture screenshots for each route
+        while IFS= read -r route; do
+          [ -z "$route" ] && continue
+
+          # Create safe filename from route
+          FILENAME=$(echo "$route" | sed 's|^/||' | sed 's|/|_|g' | sed 's|[^a-zA-Z0-9_-]||g')
+          [ -z "$FILENAME" ] && FILENAME="index"
+          FILEPATH="$SCREENSHOTS_DIR/${FILENAME}.png"
+
+          # Capture screenshot using playwright
+          node -e "
+            const { chromium } = require('playwright');
+            (async () => {
+              const browser = await chromium.launch();
+              const page = await browser.newPage();
+              try {
+                await page.goto('${BASE_URL}${route}', { timeout: 15000, waitUntil: 'networkidle' });
+                await page.screenshot({ path: '${FILEPATH}', fullPage: true });
+                console.log('Captured: ${route}');
+              } catch (e) {
+                console.log('Failed: ${route} -', e.message);
+              }
+              await browser.close();
+            })();
+          " 2>/dev/null || echo "Failed to capture $route"
+
+          if [ -f "$FILEPATH" ]; then
+            SCREENSHOTS="${SCREENSHOTS}${FILEPATH}\n"
+            COUNT=$((COUNT + 1))
+          fi
+        done <<< "$ROUTES"
+
+        echo "count=$COUNT" >> $GITHUB_OUTPUT
+        echo "screenshots<<EOF" >> $GITHUB_OUTPUT
+        echo -e "$SCREENSHOTS" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
