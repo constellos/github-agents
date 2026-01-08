@@ -90,9 +90,9 @@ runs:
           PROMPT_LINK="[View agent prompt](https://github.com/${{ github.repository }}/blob/${{ github.head_ref || github.ref_name }}/$PROMPT_FILE)"
         fi
 
-        # Build checks table
-        CHECKS_TABLE="| Check | Status | Result | Reasoning |
-|-------|--------|--------|-----------|"
+        # Build checks table header
+        CHECKS_TABLE="| Check | Status | Result | Reasoning |"
+        CHECKS_TABLE="${CHECKS_TABLE}"$'\n'"|-------|--------|--------|-----------|"
 
         # Parse checks from JSON
         CHECKS_COUNT=$(echo "$RESULT" | jq '.checks | length' 2>/dev/null || echo "0")
@@ -139,34 +139,28 @@ runs:
           REASONING_CELL="$CHECK_REASONING"
           [ -n "$FILES_DETAIL" ] && REASONING_CELL="$CHECK_REASONING $FILES_DETAIL"
 
-          CHECKS_TABLE="$CHECKS_TABLE
-| $CHECK_NAME | $CHECK_EMOJI | $CHECK_RESULT | $REASONING_CELL |"
+          CHECKS_TABLE="${CHECKS_TABLE}"$'\n'"| $CHECK_NAME | $CHECK_EMOJI | $CHECK_RESULT | $REASONING_CELL |"
         done
 
         # Get optional message
         MESSAGE=$(echo "$RESULT" | jq -r '.message // ""' 2>/dev/null)
 
         # Build the full agent section
-        AGENT_SECTION="<details>
-<summary>$STATUS_EMOJI $REVIEW_EMOJI <strong>$REVIEW</strong> — $SUMMARY_PARTS</summary>
-
-$PROMPT_LINK
-
-$CHECKS_TABLE"
+        echo "<details>" > /tmp/agent_section.md
+        echo "<summary>$STATUS_EMOJI $REVIEW_EMOJI <strong>$REVIEW</strong> — $SUMMARY_PARTS</summary>" >> /tmp/agent_section.md
+        echo "" >> /tmp/agent_section.md
+        echo "$PROMPT_LINK" >> /tmp/agent_section.md
+        echo "" >> /tmp/agent_section.md
+        echo "$CHECKS_TABLE" >> /tmp/agent_section.md
 
         # Add message if present
         if [ -n "$MESSAGE" ] && [ "$MESSAGE" != "" ] && [ "$MESSAGE" != "null" ]; then
-          AGENT_SECTION="$AGENT_SECTION
-
-> $MESSAGE"
+          echo "" >> /tmp/agent_section.md
+          echo "> $MESSAGE" >> /tmp/agent_section.md
         fi
 
-        AGENT_SECTION="$AGENT_SECTION
-
-</details>"
-
-        # Save to file to preserve newlines
-        echo "$AGENT_SECTION" > /tmp/agent_section.md
+        echo "" >> /tmp/agent_section.md
+        echo "</details>" >> /tmp/agent_section.md
 
         # Output for debugging
         echo "Generated agent section for $REVIEW"
@@ -188,9 +182,7 @@ $CHECKS_TABLE"
         AGENT_SECTION=$(cat /tmp/agent_section.md)
 
         # Wrap with markers for identification
-        AGENT_BLOCK="$AGENT_MARKER
-$AGENT_SECTION
-<!-- /agent:$REVIEW -->"
+        AGENT_BLOCK="${AGENT_MARKER}"$'\n'"${AGENT_SECTION}"$'\n'"<!-- /agent:$REVIEW -->"
 
         # Check for existing comment
         EXISTING=$(gh api "/repos/${{ github.repository }}/issues/$PR/comments" \
@@ -201,13 +193,12 @@ $AGENT_SECTION
           OLD_BODY=$(echo "$EXISTING" | jq -r '.body')
 
           # Remove existing agent block if present
-          # Using perl for multi-line regex replacement
           NEW_BODY=$(echo "$OLD_BODY" | perl -0777 -pe "s/<!-- agent:$REVIEW -->.*?<!-- \\/agent:$REVIEW -->\n?//gs")
 
           # Insert new agent block before the footer
           NEW_BODY=$(echo "$NEW_BODY" | sed "/^---$/i\\
-$AGENT_BLOCK
-")
+        $AGENT_BLOCK
+        ")
 
           # Recalculate aggregate stats from all agent blocks
           TOTAL_AGENTS=$(echo "$NEW_BODY" | grep -c "<!-- agent:" || echo "0")
@@ -233,17 +224,20 @@ $AGENT_BLOCK
             AGGREGATE="**1 Agent**: ❌ 1 Failed"
           fi
 
-          COMMENT="$MARKER
-## 📋 Reviews
+          # Build comment
+          {
+            echo "$MARKER"
+            echo "## 📋 Reviews"
+            echo ""
+            echo "$AGGREGATE"
+            echo ""
+            echo "---"
+            echo ""
+            echo "$AGENT_BLOCK"
+            echo ""
+            echo "---"
+            echo "*Claude Code CI*"
+          } > /tmp/comment.md
 
-$AGGREGATE
-
----
-
-$AGENT_BLOCK
-
----
-*Claude Code CI*"
-
-          gh pr comment "$PR" --body "$COMMENT"
+          gh pr comment "$PR" --body-file /tmp/comment.md
         fi
