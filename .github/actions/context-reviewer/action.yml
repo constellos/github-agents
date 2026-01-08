@@ -81,7 +81,7 @@ runs:
     - name: Run review
       if: steps.find.outputs.count != '0'
       id: review
-      uses: anthropics/claude-code-base-action@beta
+      uses: anthropics/claude-code-base-action@main
       with:
         claude_code_oauth_token: ${{ inputs.claude_code_oauth_token }}
         allowed_tools: "View,GlobTool,Grep,Bash(cat:*)"

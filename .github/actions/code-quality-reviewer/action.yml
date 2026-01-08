@@ -63,7 +63,7 @@ runs:
 
     - name: Run review
       id: review
-      uses: anthropics/claude-code-base-action@beta
+      uses: anthropics/claude-code-base-action@main
       with:
         claude_code_oauth_token: ${{ inputs.claude_code_oauth_token }}
         allowed_tools: "View,GlobTool,Grep,Bash(git diff:*),Bash(cat:*)"

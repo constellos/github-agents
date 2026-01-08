@@ -247,7 +247,7 @@ runs:
     - name: Run review
       if: steps.hook-config.outputs.skip_review != 'true'
       id: review
-      uses: anthropics/claude-code-base-action@beta
+      uses: anthropics/claude-code-base-action@main
       with:
         claude_code_oauth_token: ${{ inputs.claude_code_oauth_token }}
         allowed_tools: "View,GlobTool,Grep,Bash(cat:*),Bash(ls:*),Bash(head:*),Bash(jq:*),Bash(file:*)"
