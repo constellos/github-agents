@@ -55,33 +55,26 @@ runs:
         CHECKS_SKIPPED="${{ inputs.checks_skipped }}"
         PROMPT_FILE="${{ inputs.prompt_file }}"
 
-        # Determine review type emoji
-        case "$REVIEW" in
-          "Requirements") REVIEW_EMOJI="📝" ;;
-          "Code Quality") REVIEW_EMOJI="🔍" ;;
-          "Context") REVIEW_EMOJI="📚" ;;
-          "Visual") REVIEW_EMOJI="🎨" ;;
-          "UX") REVIEW_EMOJI="👤" ;;
-          *) REVIEW_EMOJI="📋" ;;
-        esac
-
-        # Determine status emoji
-        if [ "$PASSED" = "true" ]; then
+        # Determine status emoji based on check counts (not just passed boolean)
+        if [ "$CHECKS_PASSED" -gt 0 ] && [ "$CHECKS_FAILED" -eq 0 ]; then
           STATUS_EMOJI="✅"
-        else
+        elif [ "$CHECKS_FAILED" -gt 0 ]; then
           STATUS_EMOJI="❌"
+        else
+          # All skipped
+          STATUS_EMOJI="⚠️"
         fi
 
-        # Build summary line
+        # Build summary line with bullet separator and lowercase
         SUMMARY_PARTS=""
-        [ "$CHECKS_PASSED" -gt 0 ] && SUMMARY_PARTS="✅ $CHECKS_PASSED Passed"
+        [ "$CHECKS_PASSED" -gt 0 ] && SUMMARY_PARTS="✅ $CHECKS_PASSED passed"
         if [ "$CHECKS_FAILED" -gt 0 ]; then
-          [ -n "$SUMMARY_PARTS" ] && SUMMARY_PARTS="$SUMMARY_PARTS / "
-          SUMMARY_PARTS="${SUMMARY_PARTS}❌ $CHECKS_FAILED Failed"
+          [ -n "$SUMMARY_PARTS" ] && SUMMARY_PARTS="$SUMMARY_PARTS • "
+          SUMMARY_PARTS="${SUMMARY_PARTS}❌ $CHECKS_FAILED failed"
         fi
         if [ "$CHECKS_SKIPPED" -gt 0 ]; then
-          [ -n "$SUMMARY_PARTS" ] && SUMMARY_PARTS="$SUMMARY_PARTS / "
-          SUMMARY_PARTS="${SUMMARY_PARTS}⚠️ $CHECKS_SKIPPED Skipped"
+          [ -n "$SUMMARY_PARTS" ] && SUMMARY_PARTS="$SUMMARY_PARTS • "
+          SUMMARY_PARTS="${SUMMARY_PARTS}⚠️ $CHECKS_SKIPPED skipped"
         fi
 
         # Build prompt link
@@ -147,7 +140,7 @@ runs:
 
         # Build the full agent section
         echo "<details>" > /tmp/agent_section.md
-        echo "<summary>$STATUS_EMOJI $REVIEW_EMOJI <strong>$REVIEW</strong> — $SUMMARY_PARTS</summary>" >> /tmp/agent_section.md
+        echo "<summary><strong>$REVIEW</strong>: $SUMMARY_PARTS</summary>" >> /tmp/agent_section.md
         echo "" >> /tmp/agent_section.md
         echo "$PROMPT_LINK" >> /tmp/agent_section.md
         echo "" >> /tmp/agent_section.md
@@ -200,36 +193,12 @@ runs:
         $AGENT_BLOCK
         ")
 
-          # Recalculate aggregate stats from all agent blocks
-          TOTAL_AGENTS=$(echo "$NEW_BODY" | grep -c "<!-- agent:" || echo "0")
-          TOTAL_PASSED=$(echo "$NEW_BODY" | grep -oP '(?<=<summary>)✅' | wc -l || echo "0")
-          TOTAL_FAILED=$(echo "$NEW_BODY" | grep -oP '(?<=<summary>)❌' | wc -l || echo "0")
-
-          # Update aggregate line
-          if [ "$TOTAL_FAILED" -gt 0 ]; then
-            AGGREGATE="**$TOTAL_AGENTS Agents**: ✅ $TOTAL_PASSED Passed / ❌ $TOTAL_FAILED Failed"
-          else
-            AGGREGATE="**$TOTAL_AGENTS Agents**: ✅ $TOTAL_PASSED Passed"
-          fi
-
-          # Replace aggregate line
-          NEW_BODY=$(echo "$NEW_BODY" | sed "s/^\*\*[0-9]* Agents\*\*:.*/$AGGREGATE/")
-
           gh api --method PATCH "/repos/${{ github.repository }}/issues/comments/$COMMENT_ID" -f body="$NEW_BODY"
         else
           # Create new comment
-          if [ "$PASSED" = "true" ]; then
-            AGGREGATE="**1 Agent**: ✅ 1 Passed"
-          else
-            AGGREGATE="**1 Agent**: ❌ 1 Failed"
-          fi
-
-          # Build comment
           {
             echo "$MARKER"
-            echo "## 📋 Reviews"
-            echo ""
-            echo "$AGGREGATE"
+            echo "Updates on your PR checks from AI reviewers."
             echo ""
             echo "---"
             echo ""

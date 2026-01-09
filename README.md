@@ -351,6 +351,62 @@ Add these secrets to your repository (Settings → Secrets → Actions):
 | `CLAUDE_CODE_OAUTH_TOKEN` | Claude Code OAuth token | Yes |
 | `GITHUB_TOKEN` | Automatically provided by GitHub Actions | No (auto-provided) |
 
+### Custom Bot Identity (Optional)
+
+By default, review comments appear from "github-actions bot". To use a custom bot identity (e.g., "Constellos"), create a GitHub App and use its token:
+
+1. Create a GitHub App at [github.com/settings/apps](https://github.com/settings/apps)
+2. Grant permissions: `Pull requests: Read & Write`, `Issues: Read`
+3. Install the app on your organization/repositories
+4. Add secrets to your org: `CONSTELLOS_APP_ID` and `CONSTELLOS_APP_PRIVATE_KEY`
+
+Then update your workflow to generate an app token:
+
+```yaml
+jobs:
+  ai-review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: read
+    steps:
+      - uses: actions/checkout@v4
+
+      # Generate token from GitHub App
+      - name: Generate Constellos Token
+        id: constellos_token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.CONSTELLOS_APP_ID }}
+          private-key: ${{ secrets.CONSTELLOS_APP_PRIVATE_KEY }}
+
+      # Use the app token instead of GITHUB_TOKEN
+      - name: Requirements Review
+        id: review
+        uses: constellos/claude-code-actions/.github/actions/requirements-reviewer@main
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          pr_number: ${{ github.event.pull_request.number }}
+          branch: ${{ github.head_ref }}
+          github_token: ${{ steps.constellos_token.outputs.token }}
+
+      - name: Post review comment
+        if: always()
+        uses: constellos/claude-code-actions/.github/actions/review-comment@main
+        with:
+          review_name: 'Requirements'
+          passed: ${{ steps.review.outputs.passed }}
+          result_json: ${{ steps.review.outputs.result }}
+          checks_passed: ${{ steps.review.outputs.checks_passed }}
+          checks_failed: ${{ steps.review.outputs.checks_failed }}
+          checks_skipped: ${{ steps.review.outputs.checks_skipped }}
+          pr_number: ${{ github.event.pull_request.number }}
+          sha: ${{ github.sha }}
+          github_token: ${{ steps.constellos_token.outputs.token }}
+          prompt_file: '.claude/agents/reviewers/requirements.md'
+```
+
 ## Org-Level Workflows
 
 For centralized management, use a reusable workflow in your org's `.github` repository:

@@ -12,11 +12,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated action name from "Claude Code Review Actions" to "Constellos Review Actions"
 - Updated README with clearer documentation about review-comment action requirement
 - Added inline comments to workflow examples clarifying two-step pattern (reviewer + comment)
+- **Comment format overhaul**: Simplified and cleaner comment layout
+  - Removed review type emojis (📝, 🔍, etc.) from agent summary lines
+  - Changed format from "✅ 📝 Requirements — ✅ 3 Passed" to "Requirements: ✅ 3 passed • ⚠️ 0 skipped"
+  - Replaced "📋 Reviews" title with "Updates on your PR checks from AI reviewers."
+  - Removed aggregate agent summary line ("**N Agents**: ...")
+  - Changed separator from "/" to "•" and lowercase status text
+- Added `skipped` output to requirements-reviewer for workflow orchestration
+- Added GitHub App documentation for custom bot identity
 
 ### Fixed
 - Added troubleshooting section explaining why beautiful table format might not appear
 - Clarified that review-comment action must be called explicitly to see detailed checks table
 - Added warning in Quick Start section about root action not automatically posting comments
+- All-skipped reviews now show ⚠️ status instead of ✅
 
 ## [1.0.0] - 2026-01-05
 

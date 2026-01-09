@@ -23,6 +23,9 @@ outputs:
   passed:
     description: 'Whether the review passed (all checks passed)'
     value: ${{ steps.extract.outputs.passed }}
+  skipped:
+    description: 'Whether the review was entirely skipped (no issue linked)'
+    value: ${{ steps.extract.outputs.skipped }}
   result:
     description: 'JSON result from the review'
     value: ${{ steps.extract.outputs.result }}
@@ -133,6 +136,7 @@ runs:
         if [ "${{ steps.validate.outputs.skip }}" = "true" ]; then
           REASON="${{ steps.validate.outputs.skip_reason }}"
           echo "passed=true" >> $GITHUB_OUTPUT
+          echo "skipped=true" >> $GITHUB_OUTPUT
           echo "checks_passed=0" >> $GITHUB_OUTPUT
           echo "checks_failed=0" >> $GITHUB_OUTPUT
           echo "checks_skipped=3" >> $GITHUB_OUTPUT
@@ -179,6 +183,7 @@ runs:
 
         # Always output
         echo "passed=$PASSED" >> $GITHUB_OUTPUT
+        echo "skipped=false" >> $GITHUB_OUTPUT
         echo "result=$RESULT" >> $GITHUB_OUTPUT
         echo "checks_passed=$CHECKS_PASSED" >> $GITHUB_OUTPUT
         echo "checks_failed=$CHECKS_FAILED" >> $GITHUB_OUTPUT
