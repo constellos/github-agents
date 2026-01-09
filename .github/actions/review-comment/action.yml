@@ -236,7 +236,7 @@ runs:
             echo "$AGENT_BLOCK"
             echo ""
             echo "---"
-            echo "*Claude Code CI*"
+            echo "*Constellos*"
           } > /tmp/comment.md
 
           gh pr comment "$PR" --body-file /tmp/comment.md

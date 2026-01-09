@@ -1,4 +1,4 @@
-# Claude Code Review Actions
+# Constellos Review Actions
 
 AI-powered code review using Claude - modular GitHub Actions for automated PR quality checks.
 
@@ -23,6 +23,10 @@ This repository provides a suite of 8 composable GitHub Actions for comprehensiv
 
 ### Simple Usage (Root Action)
 
+> ⚠️ **Note:** This pattern runs the review but does NOT automatically post the beautiful table comment.
+> For the detailed checks table with collapsible agent sections, you must also call the `review-comment`
+> action separately (see [troubleshooting](#issue-not-seeing-beautiful-table-with-per-agent-checks) and "Full CI Pipeline" section below).
+
 Use the root action to run a single review type:
 
 ```yaml
@@ -44,6 +48,8 @@ jobs:
           branch: ${{ github.head_ref }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
 ```
+
+This will run the AI review and output results, but won't create the detailed PR comment with the beautiful table.
 
 ### Full CI Pipeline
 
@@ -375,6 +381,8 @@ jobs:
     needs: [lint]
     steps:
       - uses: actions/checkout@v4
+
+      # Step 1: Run reviewer
       - name: Requirements Review
         id: review
         uses: constellos/claude-code-actions/.github/actions/requirements-reviewer@${{ inputs.actions_version }}
@@ -384,6 +392,7 @@ jobs:
           branch: ${{ github.head_ref }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
+      # Step 2: Post beautiful table comment
       - name: Update comment
         if: always()
         uses: constellos/claude-code-actions/.github/actions/review-comment@${{ inputs.actions_version }}
@@ -492,6 +501,53 @@ permissions:
   pull-requests: write
   issues: read
 ```
+
+### Issue: Not seeing beautiful table with per-agent checks
+
+**Cause**: The `review-comment` action is not being called after reviewers run.
+
+**Symptoms**:
+- Only seeing simplified status in PR comments like "Status: Completed" or "Review ran successfully"
+- No collapsible agent sections with detailed checks tables
+- Comment footer shows branding but no table content
+
+**Fix**:
+
+The beautiful table format ONLY appears when you explicitly call the `review-comment` action after each reviewer:
+
+```yaml
+# Step 1: Run the reviewer
+- name: Requirements Review
+  id: review
+  uses: constellos/claude-code-actions/.github/actions/requirements-reviewer@main
+  with:
+    claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+    pr_number: ${{ github.event.pull_request.number }}
+    branch: ${{ github.head_ref }}
+    github_token: ${{ secrets.GITHUB_TOKEN }}
+
+# Step 2: REQUIRED - Post the beautiful table comment
+- name: Post review comment
+  if: always()  # Run even if review fails
+  uses: constellos/claude-code-actions/.github/actions/review-comment@main
+  with:
+    review_name: 'Requirements'
+    passed: ${{ steps.review.outputs.passed }}
+    result_json: ${{ steps.review.outputs.result }}
+    checks_passed: ${{ steps.review.outputs.checks_passed }}
+    checks_failed: ${{ steps.review.outputs.checks_failed }}
+    checks_skipped: ${{ steps.review.outputs.checks_skipped }}
+    pr_number: ${{ github.event.pull_request.number }}
+    sha: ${{ github.sha }}
+    github_token: ${{ secrets.GITHUB_TOKEN }}
+    prompt_file: '.claude/agents/reviewers/requirements.md'
+```
+
+**Important Notes:**
+- Using the root action (`uses: constellos/claude-code-actions@main`) does NOT automatically post comments
+- You must call `review-comment` separately for each reviewer
+- Use `if: always()` to ensure comments are posted even when reviews fail
+- The beautiful table appears in PR "Conversation" tab as a comment, NOT in the "Checks" tab
 
 ## Version Pinning
 

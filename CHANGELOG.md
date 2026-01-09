@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- Rebranded from "Claude Code CI" to "Constellos" in review comment footer
+- Updated action name from "Claude Code Review Actions" to "Constellos Review Actions"
+- Updated README with clearer documentation about review-comment action requirement
+- Added inline comments to workflow examples clarifying two-step pattern (reviewer + comment)
+
+### Fixed
+- Added troubleshooting section explaining why beautiful table format might not appear
+- Clarified that review-comment action must be called explicitly to see detailed checks table
+- Added warning in Quick Start section about root action not automatically posting comments
+
 ## [1.0.0] - 2026-01-05
 
 ### Added
@@ -40,15 +53,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - All file operations use project-local directories (`.claude/`)
 - No external network calls except to GitHub API
 - Secrets properly scoped to required actions only
-
-## [Unreleased]
-
-### Planned
-- Turborepo/monorepo workspace filtering support
-- Performance benchmarking reviewer
-- Security vulnerability reviewer
-- Automated visual approval workflow
-- Multi-language support (Python, Go, Rust)
 
 ---
 
