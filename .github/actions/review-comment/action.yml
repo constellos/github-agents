@@ -65,17 +65,8 @@ runs:
           STATUS_EMOJI="⚠️"
         fi
 
-        # Build summary line with bullet separator and lowercase
-        SUMMARY_PARTS=""
-        [ "$CHECKS_PASSED" -gt 0 ] && SUMMARY_PARTS="✅ $CHECKS_PASSED passed"
-        if [ "$CHECKS_FAILED" -gt 0 ]; then
-          [ -n "$SUMMARY_PARTS" ] && SUMMARY_PARTS="$SUMMARY_PARTS • "
-          SUMMARY_PARTS="${SUMMARY_PARTS}❌ $CHECKS_FAILED failed"
-        fi
-        if [ "$CHECKS_SKIPPED" -gt 0 ]; then
-          [ -n "$SUMMARY_PARTS" ] && SUMMARY_PARTS="$SUMMARY_PARTS • "
-          SUMMARY_PARTS="${SUMMARY_PARTS}⚠️ $CHECKS_SKIPPED skipped"
-        fi
+        # Build summary line - always show all three counts
+        SUMMARY_PARTS="✅ $CHECKS_PASSED passed • ❌ $CHECKS_FAILED failed • ⚠️ $CHECKS_SKIPPED skipped"
 
         # Build prompt link
         PROMPT_LINK=""
@@ -84,8 +75,8 @@ runs:
         fi
 
         # Build checks table header
-        CHECKS_TABLE="| Check | Status | Result | Reasoning |"
-        CHECKS_TABLE="${CHECKS_TABLE}"$'\n'"|-------|--------|--------|-----------|"
+        CHECKS_TABLE="| Check | Status | Reasoning |"
+        CHECKS_TABLE="${CHECKS_TABLE}"$'\n'"|-------|--------|-----------|"
 
         # Parse checks from JSON
         CHECKS_COUNT=$(echo "$RESULT" | jq '.checks | length' 2>/dev/null || echo "0")
@@ -93,7 +84,6 @@ runs:
         for i in $(seq 0 $((CHECKS_COUNT - 1))); do
           CHECK_NAME=$(echo "$RESULT" | jq -r ".checks[$i].name // \"Check $i\"")
           CHECK_STATUS=$(echo "$RESULT" | jq -r ".checks[$i].status // \"skipped\"")
-          CHECK_RESULT=$(echo "$RESULT" | jq -r ".checks[$i].result // \"N/A\"")
           CHECK_REASONING=$(echo "$RESULT" | jq -r ".checks[$i].reasoning // \"N/A\"")
 
           # Status emoji for check
@@ -125,18 +115,14 @@ runs:
           fi
 
           # Escape pipe characters in content
-          CHECK_RESULT=$(echo "$CHECK_RESULT" | sed 's/|/\\|/g')
           CHECK_REASONING=$(echo "$CHECK_REASONING" | sed 's/|/\\|/g')
 
           # Add reasoning with files detail if present
           REASONING_CELL="$CHECK_REASONING"
           [ -n "$FILES_DETAIL" ] && REASONING_CELL="$CHECK_REASONING $FILES_DETAIL"
 
-          CHECKS_TABLE="${CHECKS_TABLE}"$'\n'"| $CHECK_NAME | $CHECK_EMOJI | $CHECK_RESULT | $REASONING_CELL |"
+          CHECKS_TABLE="${CHECKS_TABLE}"$'\n'"| $CHECK_NAME | $CHECK_EMOJI | $REASONING_CELL |"
         done
-
-        # Get optional message
-        MESSAGE=$(echo "$RESULT" | jq -r '.message // ""' 2>/dev/null)
 
         # Build the full agent section
         echo "<details>" > /tmp/agent_section.md
@@ -145,13 +131,6 @@ runs:
         echo "$PROMPT_LINK" >> /tmp/agent_section.md
         echo "" >> /tmp/agent_section.md
         echo "$CHECKS_TABLE" >> /tmp/agent_section.md
-
-        # Add message if present
-        if [ -n "$MESSAGE" ] && [ "$MESSAGE" != "" ] && [ "$MESSAGE" != "null" ]; then
-          echo "" >> /tmp/agent_section.md
-          echo "> $MESSAGE" >> /tmp/agent_section.md
-        fi
-
         echo "" >> /tmp/agent_section.md
         echo "</details>" >> /tmp/agent_section.md
 
@@ -188,10 +167,8 @@ runs:
           # Remove existing agent block if present
           NEW_BODY=$(echo "$OLD_BODY" | perl -0777 -pe "s/<!-- agent:$REVIEW -->.*?<!-- \\/agent:$REVIEW -->\n?//gs")
 
-          # Insert new agent block before the footer
-          NEW_BODY=$(echo "$NEW_BODY" | sed "/^---$/i\\
-        $AGENT_BLOCK
-        ")
+          # Append new agent block
+          NEW_BODY="${NEW_BODY}"$'\n'"${AGENT_BLOCK}"
 
           gh api --method PATCH "/repos/${{ github.repository }}/issues/comments/$COMMENT_ID" -f body="$NEW_BODY"
         else
@@ -200,12 +177,7 @@ runs:
             echo "$MARKER"
             echo "Updates on your PR checks from AI reviewers."
             echo ""
-            echo "---"
-            echo ""
             echo "$AGENT_BLOCK"
-            echo ""
-            echo "---"
-            echo "*Constellos*"
           } > /tmp/comment.md
 
           gh pr comment "$PR" --body-file /tmp/comment.md

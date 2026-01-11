@@ -85,8 +85,6 @@ runs:
       uses: anthropics/claude-code-base-action@main
       with:
         claude_code_oauth_token: ${{ inputs.claude_code_oauth_token }}
-        allowed_tools: "View,GlobTool,Grep,Bash(cat:*)"
-        max_turns: 15
         prompt: ${{ steps.agent.outputs.prompt }}
 
     - name: Extract result

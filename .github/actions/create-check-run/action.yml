@@ -1,0 +1,51 @@
+name: Create Check Run
+description: Create a GitHub Check Run for Constellos reviews
+
+branding:
+  icon: 'check-circle'
+  color: 'purple'
+
+inputs:
+  sha:
+    description: 'Commit SHA for the check run'
+    required: true
+  conclusion:
+    description: 'Check conclusion (success, failure, neutral, cancelled, skipped, timed_out, action_required)'
+    required: true
+  summary:
+    description: 'Markdown summary of the check results'
+    required: true
+  title:
+    description: 'Title for the check run output'
+    required: false
+    default: 'AI Review Results'
+  github_token:
+    description: 'GitHub token with checks:write permission (must be App token)'
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Create check run
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github_token }}
+      run: |
+        SHA="${{ inputs.sha }}"
+        CONCLUSION="${{ inputs.conclusion }}"
+        TITLE="${{ inputs.title }}"
+
+        # Read summary from input (handle multiline)
+        SUMMARY='${{ inputs.summary }}'
+
+        # Create the check run using GitHub API
+        gh api \
+          --method POST \
+          "/repos/${{ github.repository }}/check-runs" \
+          -f name="Constellos Agent Reviews" \
+          -f head_sha="$SHA" \
+          -f status="completed" \
+          -f conclusion="$CONCLUSION" \
+          -f "output[title]=$TITLE" \
+          -f "output[summary]=$SUMMARY" \
+          || echo "::warning::Failed to create check run. Ensure the GitHub App has 'checks: write' permission."

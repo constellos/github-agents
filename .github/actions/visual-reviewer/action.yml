@@ -146,9 +146,6 @@ runs:
       uses: anthropics/claude-code-base-action@main
       with:
         claude_code_oauth_token: ${{ inputs.claude_code_oauth_token }}
-        allowed_tools: "View,GlobTool,Bash(ls:*)"
-        max_turns: 20
-        model: ${{ inputs.model }}
         prompt: ${{ steps.agent.outputs.prompt }}
 
     - name: Extract result

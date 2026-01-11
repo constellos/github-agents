@@ -251,8 +251,6 @@ runs:
       uses: anthropics/claude-code-base-action@main
       with:
         claude_code_oauth_token: ${{ inputs.claude_code_oauth_token }}
-        allowed_tools: "View,GlobTool,Grep,Bash(cat:*),Bash(ls:*),Bash(head:*),Bash(jq:*),Bash(file:*)"
-        max_turns: 20
         prompt: ${{ steps.agent.outputs.prompt }}
         settings: ${{ steps.hook-config.outputs.settings_json }}
 
