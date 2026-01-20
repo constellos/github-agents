@@ -17,13 +17,16 @@ inputs:
     required: true
   checks_passed:
     description: 'Number of checks that passed'
-    required: true
+    required: false
+    default: '0'
   checks_failed:
     description: 'Number of checks that failed'
-    required: true
+    required: false
+    default: '0'
   checks_skipped:
     description: 'Number of checks that were skipped'
-    required: true
+    required: false
+    default: '0'
   pr_number:
     description: 'Pull request number'
     required: true
@@ -55,6 +58,11 @@ runs:
         CHECKS_FAILED="${{ inputs.checks_failed }}"
         CHECKS_SKIPPED="${{ inputs.checks_skipped }}"
         PROMPT_FILE="${{ inputs.prompt_file }}"
+
+        # Guard against empty values (issue #4)
+        CHECKS_PASSED="${CHECKS_PASSED:-0}"
+        CHECKS_FAILED="${CHECKS_FAILED:-0}"
+        CHECKS_SKIPPED="${CHECKS_SKIPPED:-0}"
 
         # Determine status emoji based on check counts (not just passed boolean)
         if [ "$CHECKS_PASSED" -gt 0 ] && [ "$CHECKS_FAILED" -eq 0 ]; then
@@ -156,6 +164,10 @@ runs:
         PASSED="${{ inputs.passed }}"
         CHECKS_PASSED="${{ inputs.checks_passed }}"
         CHECKS_FAILED="${{ inputs.checks_failed }}"
+
+        # Guard against empty values (issue #4)
+        CHECKS_PASSED="${CHECKS_PASSED:-0}"
+        CHECKS_FAILED="${CHECKS_FAILED:-0}"
 
         # Read the generated section
         AGENT_SECTION=$(cat /tmp/agent_section.md)
