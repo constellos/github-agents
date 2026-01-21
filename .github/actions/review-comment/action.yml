@@ -157,7 +157,7 @@ runs:
       env:
         GITHUB_TOKEN: ${{ inputs.github_token }}
       run: |
-        MARKER="<!-- ci-review-${{ inputs.sha }} -->"
+        MARKER="<!-- ci-review-pr-${{ inputs.pr_number }} -->"
         AGENT_MARKER="<!-- agent:${{ inputs.review_name }} -->"
         PR="${{ inputs.pr_number }}"
         REVIEW="${{ inputs.review_name }}"
