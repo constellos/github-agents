@@ -91,49 +91,15 @@ src/index.ts                 # TypeScript source
 
 ## Setup Guide
 
-### 1. Add Workflow to Your Repo
+### Automatic Setup (Recommended)
 
-Copy `.github/templates/constellos-review.yml` to your repo's `.github/workflows/` directory:
+When you install the Constellos GitHub App on your repo, it automatically:
+1. Creates the workflow file (`.github/workflows/constellos.yml`)
+2. Starts reviewing PRs after CI passes
 
-```yaml
-name: Constellos Review
-on:
-  pull_request:
-    types: [opened, synchronize, reopened]
+Just install the app and add `CLAUDE_CODE_OAUTH_TOKEN` to your repo secrets.
 
-jobs:
-  config:
-    runs-on: ubuntu-latest
-    outputs:
-      agents: ${{ steps.read.outputs.agents }}
-    steps:
-      - uses: actions/checkout@v4
-      - id: read
-        run: |
-          if [ -f ".constellos/config.json" ]; then
-            AGENTS=$(jq -c '[.agents | to_entries[] | select(.value.enabled) | .key]' .constellos/config.json)
-          else
-            AGENTS='["requirements","code-quality"]'
-          fi
-          echo "agents=$AGENTS" >> $GITHUB_OUTPUT
-
-  review:
-    needs: config
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        agent: ${{ fromJson(needs.config.outputs.agents) }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: constellos/constellos-actions@main
-        with:
-          review_type: ${{ matrix.agent }}
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          pr_number: ${{ github.event.number }}
-          branch: ${{ github.head_ref }}
-```
-
-### 2. Configure Agents (Optional)
+### Configure Agents (Optional)
 
 Create `.constellos/config.json` to enable/disable agents:
 
@@ -154,7 +120,7 @@ Create `.constellos/config.json` to enable/disable agents:
 
 If no config file exists, both `requirements` and `code-quality` agents are enabled by default.
 
-### 3. Issue Linking Conventions
+### Issue Linking Conventions
 
 The requirements reviewer links PRs to issues using these methods (in priority order):
 
