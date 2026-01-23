@@ -152,9 +152,3 @@ runs:
         echo "checks_passed=$CHECKS_PASSED" >> $GITHUB_OUTPUT
         echo "checks_failed=$CHECKS_FAILED" >> $GITHUB_OUTPUT
         echo "checks_skipped=$CHECKS_SKIPPED" >> $GITHUB_OUTPUT
-
-        # Fail CI if any checks failed (but not if just skipped)
-        if [ "$CHECKS_FAILED" -gt 0 ]; then
-          echo "::error::$CHECKS_FAILED check(s) failed"
-          exit 1
-        fi

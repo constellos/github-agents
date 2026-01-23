@@ -52,7 +52,7 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Post requirements comment
-        if: always() && matrix.agent == 'requirements'
+        if: matrix.agent == 'requirements'
         uses: ./.github/actions/review-comment
         with:
           review_name: Requirements
@@ -77,7 +77,7 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Post code-quality comment
-        if: always() && matrix.agent == 'code-quality'
+        if: matrix.agent == 'code-quality'
         uses: ./.github/actions/review-comment
         with:
           review_name: Code Quality
