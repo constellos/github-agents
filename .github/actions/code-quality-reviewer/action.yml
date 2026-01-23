@@ -160,8 +160,19 @@ runs:
         if [ -f "$EXEC" ]; then
           # Get ALL text from assistant messages, joined together
           ALL_TEXT=$(jq -r '[.[] | select(.type=="assistant") | .message.content[]? | select(.type=="text") | .text] | join("\n")' "$EXEC" 2>/dev/null || echo "")
-          # Extract JSON block from anywhere in the combined text
+          # Strategy 1: Extract from ```json block
           JSON=$(echo "$ALL_TEXT" | sed -n '/```json/,/```/{/```/d;p;}' | head -100)
+
+          # Strategy 2: If no json block, try to find raw JSON object with "checks" key
+          if ! echo "$JSON" | jq . >/dev/null 2>&1; then
+            JSON=$(echo "$ALL_TEXT" | grep -oP '\{"checks":\s*\[.*\]\s*(,"message":[^}]*)?\}' | head -1)
+          fi
+
+          # Strategy 3: Extract any JSON object starting with {"checks"
+          if ! echo "$JSON" | jq . >/dev/null 2>&1; then
+            JSON=$(echo "$ALL_TEXT" | perl -ne 'print if /\{"checks":\[/.../"message":/' | tr '\n' ' ')
+          fi
+
           if echo "$JSON" | jq . >/dev/null 2>&1; then
             # Count checks by status
             CHECKS_PASSED=$(echo "$JSON" | jq '[.checks[]? | select(.status == "passed")] | length')
