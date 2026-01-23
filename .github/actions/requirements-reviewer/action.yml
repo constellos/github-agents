@@ -57,10 +57,30 @@ runs:
         ISSUE=""
         [[ $BRANCH =~ ^([0-9]+)- ]] && ISSUE="${BASH_REMATCH[1]}"
 
-        # Fallback: Parse PR body for "Closes #X", "Fixes #X", "Resolves #X"
+        # Fallback 1: Parse PR body for "Closes #X", "Fixes #X", "Resolves #X"
         if [ -z "$ISSUE" ]; then
           PR_BODY=$(gh pr view ${{ inputs.pr_number }} --json body --jq '.body' 2>/dev/null || echo "")
           ISSUE=$(echo "$PR_BODY" | grep -oP '(Closes|Fixes|Resolves)\s+#\K[0-9]+' | head -1 || echo "")
+        fi
+
+        # Fallback 2: Query GitHub's closingIssuesReferences API
+        # This uses GitHub's native issue linking detection
+        if [ -z "$ISSUE" ]; then
+          ISSUE=$(gh api graphql -f query='
+            query($owner: String!, $name: String!, $pr: Int!) {
+              repository(owner: $owner, name: $name) {
+                pullRequest(number: $pr) {
+                  closingIssuesReferences(first: 1) {
+                    nodes { number }
+                  }
+                }
+              }
+            }' -f owner='${{ github.repository_owner }}' \
+               -f name='${{ github.event.repository.name }}' \
+               -F pr=${{ inputs.pr_number }} \
+               --jq '.data.repository.pullRequest.closingIssuesReferences.nodes[0].number' 2>/dev/null || echo "")
+          # Clean up null/empty responses
+          [ "$ISSUE" = "null" ] && ISSUE=""
         fi
 
         echo "issue=$ISSUE" >> $GITHUB_OUTPUT

@@ -2,5 +2,18 @@
   "enabledPlugins": {
     "github-orchestration@constellos": true,
     "project-context@constellos": true
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/link-branch-to-issue.sh ${ISSUE_NUMBER:-}",
+            "statusMessage": "Linking branch to GitHub issue"
+          }
+        ]
+      }
+    ]
   }
 }
