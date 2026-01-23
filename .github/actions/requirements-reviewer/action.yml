@@ -186,9 +186,18 @@ runs:
         RESULT='{"checks":[],"message":"Review failed to complete"}'
 
         EXEC="${{ steps.review.outputs.execution_file }}"
+        echo "::group::Debug extraction"
+        echo "EXEC path: $EXEC"
+        echo "File exists: $([ -f "$EXEC" ] && echo yes || echo no)"
         if [ -f "$EXEC" ]; then
+          echo "File size: $(wc -c < "$EXEC") bytes"
           TEXT=$(jq -r '[.[] | select(.type=="assistant") | .message.content[]? | select(.type=="text") | .text] | last // ""' "$EXEC" 2>/dev/null || echo "")
+          echo "TEXT length: ${#TEXT} chars"
+          echo "TEXT preview: ${TEXT:0:200}"
           JSON=$(echo "$TEXT" | sed -n '/```json/,/```/{/```/d;p;}' | head -50)
+          echo "JSON length: ${#JSON} chars"
+          echo "JSON preview: ${JSON:0:200}"
+          echo "::endgroup::"
           if echo "$JSON" | jq . >/dev/null 2>&1; then
             # Count checks by status
             CHECKS_PASSED=$(echo "$JSON" | jq '[.checks[]? | select(.status == "passed")] | length')
@@ -203,7 +212,12 @@ runs:
             fi
 
             RESULT=$(echo "$JSON" | jq -c '.')
+            echo "Extraction succeeded: passed=$PASSED, checks_passed=$CHECKS_PASSED"
+          else
+            echo "JSON parsing failed"
           fi
+        else
+          echo "Execution file not found"
         fi
 
         # Always output
