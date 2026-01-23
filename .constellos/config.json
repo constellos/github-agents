@@ -1,0 +1,12 @@
+{
+  "agents": {
+    "requirements": {
+      "enabled": true,
+      "prompt": ".constellos/agents/requirements.md"
+    },
+    "code-quality": {
+      "enabled": true,
+      "prompt": ".constellos/agents/code-quality.md"
+    }
+  }
+}

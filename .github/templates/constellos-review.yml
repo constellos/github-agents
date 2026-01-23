@@ -1,0 +1,47 @@
+# Constellos Review Workflow Template
+# Copy this file to your repo's .github/workflows/ directory
+#
+# Prerequisites:
+# 1. Add CLAUDE_CODE_OAUTH_TOKEN secret to your repo
+# 2. (Optional) Create .constellos/config.json to customize agents
+
+name: Constellos Review
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  # Read config and determine which agents to run
+  config:
+    runs-on: ubuntu-latest
+    outputs:
+      agents: ${{ steps.read.outputs.agents }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: read
+        run: |
+          if [ -f ".constellos/config.json" ]; then
+            AGENTS=$(jq -c '[.agents | to_entries[] | select(.value.enabled) | .key]' .constellos/config.json)
+          else
+            # Default: run both agents
+            AGENTS='["requirements","code-quality"]'
+          fi
+          echo "agents=$AGENTS" >> $GITHUB_OUTPUT
+
+  # Run each enabled agent in parallel
+  review:
+    needs: config
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        agent: ${{ fromJson(needs.config.outputs.agents) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: constellos/constellos-actions@main
+        with:
+          review_type: ${{ matrix.agent }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          pr_number: ${{ github.event.number }}
+          branch: ${{ github.head_ref }}
