@@ -158,8 +158,10 @@ runs:
 
         EXEC="${{ steps.review.outputs.execution_file }}"
         if [ -f "$EXEC" ]; then
-          TEXT=$(jq -r '[.[] | select(.type=="assistant") | .message.content[]? | select(.type=="text") | .text] | last // ""' "$EXEC" 2>/dev/null || echo "")
-          JSON=$(echo "$TEXT" | sed -n '/```json/,/```/{/```/d;p;}' | head -50)
+          # Get ALL text from assistant messages, joined together
+          ALL_TEXT=$(jq -r '[.[] | select(.type=="assistant") | .message.content[]? | select(.type=="text") | .text] | join("\n")' "$EXEC" 2>/dev/null || echo "")
+          # Extract JSON block from anywhere in the combined text
+          JSON=$(echo "$ALL_TEXT" | sed -n '/```json/,/```/{/```/d;p;}' | head -100)
           if echo "$JSON" | jq . >/dev/null 2>&1; then
             # Count checks by status
             CHECKS_PASSED=$(echo "$JSON" | jq '[.checks[]? | select(.status == "passed")] | length')
