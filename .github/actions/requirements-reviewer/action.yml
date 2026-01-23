@@ -83,6 +83,12 @@ runs:
           [ "$ISSUE" = "null" ] && ISSUE=""
         fi
 
+        # Fallback 3: Find any issue reference (#123) in PR body
+        if [ -z "$ISSUE" ]; then
+          # PR_BODY was fetched in Fallback 1, reuse it
+          ISSUE=$(echo "$PR_BODY" | grep -oP '#\K[0-9]+' | head -1 || echo "")
+        fi
+
         echo "issue=$ISSUE" >> $GITHUB_OUTPUT
 
         # Get changed files (gracefully handle permission errors)
@@ -90,8 +96,13 @@ runs:
 
         # Get issue context if available
         if [ -n "$ISSUE" ]; then
-          gh issue view $ISSUE --json title,body > .claude/review-context/issue.json 2>/dev/null || echo "{}" > .claude/review-context/issue.json
+          echo "Fetching issue $ISSUE..."
+          if ! gh issue view "$ISSUE" --json title,body > .claude/review-context/issue.json; then
+            echo "Warning: Failed to fetch issue $ISSUE"
+            echo "{}" > .claude/review-context/issue.json
+          fi
         else
+          echo "No issue number detected, skipping issue context"
           echo "{}" > .claude/review-context/issue.json
         fi
 
@@ -187,8 +198,34 @@ runs:
 
         EXEC="${{ steps.review.outputs.execution_file }}"
         if [ -f "$EXEC" ]; then
-          TEXT=$(jq -r '[.[] | select(.type=="assistant") | .message.content[]? | select(.type=="text") | .text] | last // ""' "$EXEC" 2>/dev/null || echo "")
-          JSON=$(echo "$TEXT" | sed -n '/```json/,/```/{/```/d;p;}' | head -50)
+          # Debug: Show what we're working with
+          echo "DEBUG: Checking execution file..."
+          echo "DEBUG: File exists, size: $(wc -c < "$EXEC") bytes"
+          echo "DEBUG: Message types in file:"
+          jq -r '.[].type' "$EXEC" 2>/dev/null | sort | uniq -c || echo "DEBUG: jq failed"
+
+          # Get ALL text from assistant messages, joined together
+          ALL_TEXT=$(jq -r '[.[] | select(.type=="assistant") | .message.content[]? | select(.type=="text") | .text] | join("\n")' "$EXEC" 2>/dev/null || echo "")
+          echo "DEBUG: ALL_TEXT length: ${#ALL_TEXT}"
+          echo "DEBUG: ALL_TEXT preview: ${ALL_TEXT:0:500}"
+          # Strategy 1: Extract from ```json block
+          JSON=$(echo "$ALL_TEXT" | sed -n '/```json/,/```/{/```/d;p;}' | head -100)
+
+          # Strategy 2: If no json block, try to find raw JSON object with "checks" key
+          if ! echo "$JSON" | jq . >/dev/null 2>&1; then
+            JSON=$(echo "$ALL_TEXT" | grep -oP '\{"checks":\s*\[.*\]\s*(,"message":[^}]*)?\}' | head -1)
+          fi
+
+          # Strategy 3: Extract any JSON object starting with {"checks"
+          if ! echo "$JSON" | jq . >/dev/null 2>&1; then
+            JSON=$(echo "$ALL_TEXT" | perl -ne 'print if /\{"checks":\[/.../"message":/' | tr '\n' ' ')
+          fi
+
+          # Strategy 4: Use Python for robust multiline JSON extraction
+          if ! echo "$JSON" | jq . >/dev/null 2>&1; then
+            JSON=$(echo "$ALL_TEXT" | python3 -c "import re,sys; t=sys.stdin.read(); m=re.search(r'\{[^{}]*\"checks\"[^{}]*\[.*?\][^{}]*\}',t,re.DOTALL); print(m.group() if m else '')" 2>/dev/null)
+          fi
+
           if echo "$JSON" | jq . >/dev/null 2>&1; then
             # Count checks by status
             CHECKS_PASSED=$(echo "$JSON" | jq '[.checks[]? | select(.status == "passed")] | length')

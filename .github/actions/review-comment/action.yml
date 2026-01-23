@@ -194,7 +194,7 @@ runs:
           # Create new comment
           {
             echo "$MARKER"
-            echo "Updates on your PR checks from AI reviewers."
+            echo "PR review updates from your Constellos agents. Based on linked issue(s), context files, and committed changes."
             echo ""
             echo "$AGENT_BLOCK"
           } > /tmp/comment.md
