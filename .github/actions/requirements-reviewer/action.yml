@@ -52,10 +52,16 @@ runs:
 
         BRANCH="${{ inputs.branch }}"
         echo "branch=$BRANCH" >> $GITHUB_OUTPUT
+        echo "DEBUG: Branch name is '$BRANCH'"
 
         # Extract issue number from branch name (e.g., "123-feature-name")
         ISSUE=""
-        [[ $BRANCH =~ ^([0-9]+)- ]] && ISSUE="${BASH_REMATCH[1]}"
+        if [[ $BRANCH =~ ^([0-9]+)- ]]; then
+          ISSUE="${BASH_REMATCH[1]}"
+          echo "DEBUG: Extracted issue '$ISSUE' from branch name"
+        else
+          echo "DEBUG: Branch name did not match pattern ^([0-9]+)-"
+        fi
 
         # Fallback 1: Parse PR body for "Closes #X", "Fixes #X", "Resolves #X"
         if [ -z "$ISSUE" ]; then
@@ -83,6 +89,7 @@ runs:
           [ "$ISSUE" = "null" ] && ISSUE=""
         fi
 
+        echo "DEBUG: Final issue number is '$ISSUE'"
         echo "issue=$ISSUE" >> $GITHUB_OUTPUT
 
         # Get changed files (gracefully handle permission errors)
@@ -90,8 +97,16 @@ runs:
 
         # Get issue context if available
         if [ -n "$ISSUE" ]; then
-          gh issue view $ISSUE --json title,body > .claude/review-context/issue.json 2>/dev/null || echo "{}" > .claude/review-context/issue.json
+          echo "DEBUG: Fetching issue $ISSUE..."
+          if gh issue view $ISSUE --json title,body > .claude/review-context/issue.json 2>&1; then
+            echo "DEBUG: Issue fetch succeeded, content:"
+            cat .claude/review-context/issue.json | head -c 200
+          else
+            echo "DEBUG: Issue fetch failed, using empty JSON"
+            echo "{}" > .claude/review-context/issue.json
+          fi
         else
+          echo "DEBUG: No issue number, using empty JSON"
           echo "{}" > .claude/review-context/issue.json
         fi
 
