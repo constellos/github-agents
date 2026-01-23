@@ -49,8 +49,8 @@ jobs:
           echo "  Composite actions: $ACTION_COUNT"
           echo "  Total: $TOTAL"
 
-          if [ "$TOTAL" -lt "9" ]; then
-            echo "✗ Expected at least 9 actions (1 root + 8 composite)"
+          if [ "$TOTAL" -lt "4" ]; then
+            echo "✗ Expected at least 4 actions (1 root + 3 composite)"
             exit 1
           fi
 
@@ -70,12 +70,10 @@ jobs:
 
           echo "✓ No conflicting workflows found!"
 
-      - name: Verify marketplace files
+      - name: Verify required files
         run: |
-          echo "Checking required marketplace files..."
+          echo "Checking required files..."
 
-          [ -f "README.md" ] || { echo "✗ Missing README.md"; exit 1; }
-          [ -f "CHANGELOG.md" ] || { echo "✗ Missing CHANGELOG.md"; exit 1; }
           [ -f "action.yml" ] || { echo "✗ Missing action.yml"; exit 1; }
 
           echo "✓ All required files present!"

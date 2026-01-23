@@ -89,6 +89,85 @@ src/index.ts                 # TypeScript source
 | `requirements` | Verifies PR implements issue requirements |
 | `code-quality` | Checks DRY, YAGNI, modularity, maintainability |
 
+## Setup Guide
+
+### 1. Add Workflow to Your Repo
+
+Copy `.github/templates/constellos-review.yml` to your repo's `.github/workflows/` directory:
+
+```yaml
+name: Constellos Review
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  config:
+    runs-on: ubuntu-latest
+    outputs:
+      agents: ${{ steps.read.outputs.agents }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: read
+        run: |
+          if [ -f ".constellos/config.json" ]; then
+            AGENTS=$(jq -c '[.agents | to_entries[] | select(.value.enabled) | .key]' .constellos/config.json)
+          else
+            AGENTS='["requirements","code-quality"]'
+          fi
+          echo "agents=$AGENTS" >> $GITHUB_OUTPUT
+
+  review:
+    needs: config
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        agent: ${{ fromJson(needs.config.outputs.agents) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: constellos/constellos-actions@main
+        with:
+          review_type: ${{ matrix.agent }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          pr_number: ${{ github.event.number }}
+          branch: ${{ github.head_ref }}
+```
+
+### 2. Configure Agents (Optional)
+
+Create `.constellos/config.json` to enable/disable agents:
+
+```json
+{
+  "agents": {
+    "requirements": {
+      "enabled": true,
+      "prompt": ".constellos/agents/requirements.md"
+    },
+    "code-quality": {
+      "enabled": true,
+      "prompt": ".constellos/agents/code-quality.md"
+    }
+  }
+}
+```
+
+If no config file exists, both `requirements` and `code-quality` agents are enabled by default.
+
+### 3. Issue Linking Conventions
+
+The requirements reviewer links PRs to issues using these methods (in priority order):
+
+1. **Branch name** - Use format `{issue-number}-{description}`
+   - Example: `123-add-login-feature` → links to issue #123
+
+2. **PR body keywords** - Include closing keywords in your PR description
+   - `Closes #123`
+   - `Fixes #123`
+   - `Resolves #123`
+
+If no issue is linked, the requirements review is skipped (code-quality still runs).
+
 ## Output Format
 
 All agents output JSON with a `checks` array:
