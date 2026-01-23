@@ -91,13 +91,25 @@ src/index.ts                 # TypeScript source
 
 ## Setup Guide
 
-### Automatic Setup (Recommended)
+### Manual Setup
 
-When you install the Constellos GitHub App on your repo, it automatically:
-1. Creates the workflow file (`.github/workflows/constellos.yml`)
-2. Starts reviewing PRs after CI passes
+If the Constellos GitHub App didn't automatically create the workflow file, or if you prefer manual control:
+
+1. **Copy the workflow template** from [`templates/constellos-review.yml`](templates/constellos-review.yml) to your repo at `.github/workflows/constellos-review.yml`
+
+2. **Add the required secret**: Add `CLAUDE_CODE_OAUTH_TOKEN` to your repository secrets (Settings > Secrets and variables > Actions)
+
+3. **Optionally customize agents**: Create `.constellos/config.json` to enable/disable specific agents
+
+### Automatic Setup
+
+When you install the Constellos GitHub App on your repo, it should automatically:
+1. Create the workflow file (`.github/workflows/constellos.yml`)
+2. Start reviewing PRs after CI passes
 
 Just install the app and add `CLAUDE_CODE_OAUTH_TOKEN` to your repo secrets.
+
+**Note**: If reviews aren't appearing on your PRs, verify the workflow file was created. If not, use Manual Setup above.
 
 ### Configure Agents (Optional)
 
