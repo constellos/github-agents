@@ -1,126 +1,148 @@
-# Constellos Actions
+# Constellos GitHub Agents
 
 AI-powered code review for GitHub PRs using Claude.
 
 ## What This Is
 
-This repo provides:
-1. **Default agent prompts** for AI code reviews (can be overridden per-repo)
-2. **GitHub Actions** for repos that want workflow-based approach
-3. **Review comment formatting** for posting results to PRs
+This repo (`constellos/github-agents`) provides:
+1. **Reusable workflow** that external repos can call for AI code reviews
+2. **Default agent prompts** for reviews (can be overridden per-repo)
+3. **GitHub Actions** for running individual agents
+4. **Review comment formatting** for posting results to PRs
 
 ## Architecture
 
 ```
-PR Opened → Webhook → Constellos Backend → Agent Execution → PR Comment
+PR Opened → Workflow Trigger → Reusable Workflow → Agent Execution → PR Comment
 ```
 
-1. Constellos GitHub App installed on target repo
-2. PR opened → webhook fires to Constellos backend (`constellos/constellos`)
-3. Backend checks `.constellos/config.json` for enabled agents
-4. For each enabled agent:
-   - Reads prompt from `.constellos/agents/{agent}.md`
-   - Runs `claude-code-base-action` with user's OAuth token
-   - Posts review results to PR
+1. External repo creates minimal workflow calling `constellos/github-agents/.github/workflows/review.yml`
+2. Workflow reads `.constellos/config.json` for enabled agents (defaults to all)
+3. For each enabled agent:
+   - Loads prompt from `.constellos/agents/{agent}.md` or uses default
+   - Runs `claude-code-base-action` with provided OAuth token
+   - Posts review results as PR comment
 
-## Agent Format
+## Quick Start
 
-Agents are markdown files in `.constellos/agents/`. Same format as Claude Code agent prompts:
+### 1. Add Workflow to Your Repo
 
-```markdown
-# Agent Name
+Create `.github/workflows/constellos-review.yml`:
 
-You are a [role] doing [task].
+```yaml
+name: Constellos Review
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
 
-## Checks to Perform
-1. Check name - what to look for
+jobs:
+  review:
+    uses: constellos/github-agents/.github/workflows/review.yml@main
+    with:
+      pr_number: ${{ github.event.number }}
+      sha: ${{ github.event.pull_request.head.sha }}
+      branch: ${{ github.head_ref }}
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+```
 
-## Input Files
-- Changed files: `.claude/review-context/changed.txt`
+### 2. Add Secret
 
-## Output Format
+Add `CLAUDE_CODE_OAUTH_TOKEN` to your repository secrets (Settings > Secrets and variables > Actions).
+
+### 3. (Optional) Configure Agents
+
+Create `.constellos/config.json` to enable/disable specific agents:
+
 ```json
 {
-  "checks": [
-    {"name": "...", "status": "passed|failed|skipped", ...}
-  ]
+  "agents": {
+    "requirements": { "enabled": true },
+    "code-quality": { "enabled": true },
+    "context": { "enabled": false }
+  }
 }
 ```
-```
 
-## Adding New Agents
-
-1. Create `.constellos/agents/{agent-name}.md` with prompt
-2. Add to `.constellos/config.json`:
-   ```json
-   {
-     "agents": {
-       "agent-name": {
-         "enabled": true,
-         "prompt": ".constellos/agents/agent-name.md"
-       }
-     }
-   }
-   ```
-3. Create action in `.github/actions/{agent-name}-reviewer/action.yml`
-
-## Key Files
-
-```
-.constellos/
-├── config.json              # Agent configuration
-└── agents/
-    ├── requirements.md      # Requirements reviewer prompt
-    └── code-quality.md      # Code quality reviewer prompt
-
-.github/actions/
-├── requirements-reviewer/   # Requirements review action
-├── code-quality-reviewer/   # Code quality review action
-└── review-comment/          # Posts formatted comments to PR
-
-action.yml                   # Root action (routes to specific reviewer)
-src/index.ts                 # TypeScript source
-```
+If no config file exists, `requirements` and `code-quality` agents run by default.
 
 ## Available Agents
 
 | Agent | Purpose |
 |-------|---------|
-| `requirements` | Verifies PR implements issue requirements |
+| `requirements` | Verifies PR implements linked issue requirements |
 | `code-quality` | Checks DRY, YAGNI, modularity, maintainability |
+| `context` | Reviews PR title, description, and change grouping |
 
-## Setup Guide
+## Custom Agent Prompts
 
-### Automatic Setup (Recommended)
+Override default prompts by creating `.constellos/agents/{agent}.md` in your repo:
 
-When you install the Constellos GitHub App on your repo, it automatically:
-1. Creates the workflow file (`.github/workflows/constellos.yml`)
-2. Starts reviewing PRs after CI passes
+```markdown
+# Requirements Review
 
-Just install the app and add `CLAUDE_CODE_OAUTH_TOKEN` to your repo secrets.
+You are reviewing PR changes against issue requirements.
 
-### Configure Agents (Optional)
+## Checks to Perform
+1. Completeness - all acceptance criteria addressed
+2. Scope - changes within issue scope
+3. Traceability - changes map to requirements
 
-Create `.constellos/config.json` to enable/disable agents:
+## Input Files
+- Changed files: `.claude/review-context/changed.txt`
+- Issue context: `.claude/review-context/issue.json`
 
+## Output Format
 ```json
 {
-  "agents": {
-    "requirements": {
-      "enabled": true,
-      "prompt": ".constellos/agents/requirements.md"
-    },
-    "code-quality": {
-      "enabled": true,
-      "prompt": ".constellos/agents/code-quality.md"
-    }
-  }
+  "checks": [
+    {"name": "...", "status": "passed|failed|skipped", "result": "...", "reasoning": "..."}
+  ]
 }
 ```
+```
 
-If no config file exists, both `requirements` and `code-quality` agents are enabled by default.
+## Key Files
 
-### Issue Linking Conventions
+```
+.github/
+├── workflows/
+│   ├── review.yml              # Reusable workflow (external repos call this)
+│   └── constellos-review.yml   # Local workflow for this repo
+└── actions/
+    ├── requirements-reviewer/  # Requirements review action
+    ├── code-quality-reviewer/  # Code quality review action
+    ├── context-reviewer/       # Context review action
+    ├── review-comment/         # Posts formatted comments to PR
+    ├── create-check-run/       # Creates GitHub check runs
+    └── shared/                 # Shared scripts
+
+.constellos/
+├── config.json                 # Agent configuration
+└── agents/
+    ├── requirements.md         # Requirements reviewer prompt
+    └── code-quality.md         # Code quality reviewer prompt
+
+action.yml                      # Root action (generic agent runner)
+```
+
+## Using the Root Action Directly
+
+For more control, use the root action directly:
+
+```yaml
+- uses: constellos/github-agents@main
+  with:
+    agent: requirements
+    claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+    pr_number: ${{ github.event.number }}
+    branch: ${{ github.head_ref }}
+    github_token: ${{ secrets.GITHUB_TOKEN }}
+```
+
+Supported agents: `requirements`, `code-quality`, `context`, or any custom agent with a prompt file.
+
+## Issue Linking
 
 The requirements reviewer links PRs to issues using these methods (in priority order):
 
@@ -132,7 +154,7 @@ The requirements reviewer links PRs to issues using these methods (in priority o
    - `Fixes #123`
    - `Resolves #123`
 
-If no issue is linked, the requirements review is skipped (code-quality still runs).
+If no issue is linked, the requirements review is skipped (other agents still run).
 
 ## Output Format
 
