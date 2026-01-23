@@ -38,47 +38,43 @@ You must evaluate each of these checks independently:
 
 ## Output Format
 
-**CRITICAL**: Output ONLY the JSON block below. Each check MUST have a status.
+**CRITICAL**: After your review, output a single JSON block with your findings.
+
+For each check, set `status` to exactly one of: `"passed"`, `"failed"`, or `"skipped"`.
+- Use `"passed"` if check criteria are fully satisfied
+- Use `"failed"` if any issues are found
+- Use `"skipped"` if check is not applicable (e.g., no issue context)
 
 ```json
 {
   "checks": [
     {
       "name": "Completeness",
-      "status": "passed|failed|skipped",
-      "result": "Brief 1-line result",
-      "reasoning": "Why this status was given",
-      "files": [
-        {
-          "path": "path/to/file.ts",
-          "line": 42,
-          "note": "Missing requirement X implementation"
-        }
-      ]
+      "status": "passed",
+      "result": "All acceptance criteria implemented",
+      "reasoning": "Each requirement from the issue is addressed in the code changes",
+      "files": []
     },
     {
       "name": "Scope",
-      "status": "passed|failed|skipped",
-      "result": "Brief 1-line result",
-      "reasoning": "Why this status was given",
+      "status": "passed",
+      "result": "Changes within scope",
+      "reasoning": "All changes relate directly to the issue requirements",
       "files": []
     },
     {
       "name": "Traceability",
-      "status": "passed|failed|skipped",
-      "result": "Brief 1-line result",
-      "reasoning": "Why this status was given",
+      "status": "skipped",
+      "result": "No tests required for config change",
+      "reasoning": "This is a workflow configuration change, not a code change requiring tests",
       "files": []
     }
   ],
-  "message": "Optional overall assessment (leave empty if not needed)"
+  "message": ""
 }
 ```
 
-## Status Guidelines
-- **passed**: Check criteria fully satisfied
-- **failed**: One or more issues found - be strict, fail if there are ANY violations
-- **skipped**: Check not applicable (e.g., no issue context available)
+**Important**: Replace the example values above with your actual findings. The status must be one of: `passed`, `failed`, or `skipped`.
 
 ## Guidelines
 - Be strict about scope - extra features should be flagged

@@ -46,61 +46,58 @@ You must evaluate each of these checks independently:
 
 ## Output Format
 
-**CRITICAL**: Output ONLY the JSON block below. Each check MUST have a status.
+**CRITICAL**: After your review, output a single JSON block with your findings.
 
+For each check, set `status` to exactly one of: `"passed"`, `"failed"`, or `"skipped"`.
+- Use `"passed"` if no issues found
+- Use `"failed"` if any issues found
+- Use `"skipped"` if check is not applicable
+
+Example output:
 ```json
 {
   "checks": [
     {
       "name": "DRY",
-      "status": "passed|failed|skipped",
-      "result": "Brief 1-line result",
-      "reasoning": "Why this status was given",
-      "files": [
-        {
-          "path": "path/to/file.ts",
-          "line": 42,
-          "note": "Specific issue or observation"
-        }
-      ]
+      "status": "passed",
+      "result": "No code duplication found",
+      "reasoning": "Each component has unique logic with no repeated patterns",
+      "files": []
     },
     {
       "name": "YAGNI",
-      "status": "passed|failed|skipped",
-      "result": "Brief 1-line result",
-      "reasoning": "Why this status was given",
+      "status": "passed",
+      "result": "No over-engineering detected",
+      "reasoning": "Implementation matches requirements without unnecessary complexity",
       "files": []
     },
     {
       "name": "Modularity",
-      "status": "passed|failed|skipped",
-      "result": "Brief 1-line result",
-      "reasoning": "Why this status was given",
+      "status": "passed",
+      "result": "Good separation of concerns",
+      "reasoning": "Components have single responsibilities and clear interfaces",
       "files": []
     },
     {
       "name": "Maintainability",
-      "status": "passed|failed|skipped",
-      "result": "Brief 1-line result",
-      "reasoning": "Why this status was given",
+      "status": "passed",
+      "result": "Code is readable and well-structured",
+      "reasoning": "Clear naming, appropriate comments, logical organization",
       "files": []
     },
     {
       "name": "Error Handling",
-      "status": "passed|failed|skipped",
-      "result": "Brief 1-line result",
-      "reasoning": "Why this status was given",
+      "status": "skipped",
+      "result": "No error handling code in changes",
+      "reasoning": "Changes are configuration files only",
       "files": []
     }
   ],
-  "message": "Optional overall assessment (leave empty if not needed)"
+  "message": ""
 }
 ```
 
-## Status Guidelines
-- **passed**: No issues found for this check
-- **failed**: One or more issues found - be strict, fail if there are ANY violations
-- **skipped**: Check not applicable (e.g., no error handling code to review)
+**Important**: Replace the example values above with your actual findings. The status must be one of: `passed`, `failed`, or `skipped`.
 
 ## Severity in Files
 When adding files, prioritize high-severity issues:
