@@ -1,8 +1,4 @@
 {
-  "enabledPlugins": {
-    "github-orchestration@constellos": true,
-    "project-context@constellos": true
-  },
   "hooks": {
     "SessionStart": [
       {
@@ -15,5 +11,9 @@
         ]
       }
     ]
+  },
+  "enabledPlugins": {
+    "github-orchestration@constellos": true,
+    "project-context@constellos": true
   }
 }
