@@ -83,6 +83,12 @@ runs:
           [ "$ISSUE" = "null" ] && ISSUE=""
         fi
 
+        # Fallback 3: Find any issue reference (#123) in PR body
+        if [ -z "$ISSUE" ]; then
+          # PR_BODY was fetched in Fallback 1, reuse it
+          ISSUE=$(echo "$PR_BODY" | grep -oP '#\K[0-9]+' | head -1 || echo "")
+        fi
+
         echo "issue=$ISSUE" >> $GITHUB_OUTPUT
 
         # Get changed files (gracefully handle permission errors)
@@ -192,8 +198,16 @@ runs:
 
         EXEC="${{ steps.review.outputs.execution_file }}"
         if [ -f "$EXEC" ]; then
+          # Debug: Show what we're working with
+          echo "DEBUG: Checking execution file..."
+          echo "DEBUG: File exists, size: $(wc -c < "$EXEC") bytes"
+          echo "DEBUG: Message types in file:"
+          jq -r '.[].type' "$EXEC" 2>/dev/null | sort | uniq -c || echo "DEBUG: jq failed"
+
           # Get ALL text from assistant messages, joined together
           ALL_TEXT=$(jq -r '[.[] | select(.type=="assistant") | .message.content[]? | select(.type=="text") | .text] | join("\n")' "$EXEC" 2>/dev/null || echo "")
+          echo "DEBUG: ALL_TEXT length: ${#ALL_TEXT}"
+          echo "DEBUG: ALL_TEXT preview: ${ALL_TEXT:0:500}"
           # Strategy 1: Extract from ```json block
           JSON=$(echo "$ALL_TEXT" | sed -n '/```json/,/```/{/```/d;p;}' | head -100)
 
@@ -205,6 +219,17 @@ runs:
           # Strategy 3: Extract any JSON object starting with {"checks"
           if ! echo "$JSON" | jq . >/dev/null 2>&1; then
             JSON=$(echo "$ALL_TEXT" | perl -ne 'print if /\{"checks":\[/.../"message":/' | tr '\n' ' ')
+          fi
+
+          # Strategy 4: Use Python for robust multiline JSON extraction
+          if ! echo "$JSON" | jq . >/dev/null 2>&1; then
+            JSON=$(python3 -c "
+import re, sys
+text = sys.stdin.read()
+# Find JSON with checks array
+match = re.search(r'\{[^{}]*\"checks\"\s*:\s*\[.*?\]\s*(?:,\s*\"message\"\s*:\s*\"[^\"]*\")?\s*\}', text, re.DOTALL)
+if match: print(match.group())
+" <<< "$ALL_TEXT" 2>/dev/null)
           fi
 
           if echo "$JSON" | jq . >/dev/null 2>&1; then
