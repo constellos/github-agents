@@ -168,29 +168,22 @@ runs:
       id: extract
       shell: bash
       run: |
+        # Use shared extraction logic
+        source "${{ github.workspace }}/.github/actions/shared/extract-result.sh"
+
         # Handle skipped case first
         if [ "${{ steps.validate.outputs.skip }}" = "true" ]; then
-          REASON="${{ steps.validate.outputs.skip_reason }}"
-          echo "passed=true" >> $GITHUB_OUTPUT
+          generate_skipped_result "${{ steps.validate.outputs.skip_reason }}" \
+            "Completeness" "Scope" "Traceability"
+          echo "passed=$PASSED" >> $GITHUB_OUTPUT
           echo "skipped=true" >> $GITHUB_OUTPUT
-          echo "checks_passed=0" >> $GITHUB_OUTPUT
-          echo "checks_failed=0" >> $GITHUB_OUTPUT
-          echo "checks_skipped=3" >> $GITHUB_OUTPUT
-          # Build JSON with proper escaping using jq
-          RESULT=$(jq -n --arg reason "$REASON" '{
-            checks: [
-              {name: "Completeness", status: "skipped", result: $reason, reasoning: $reason, files: []},
-              {name: "Scope", status: "skipped", result: $reason, reasoning: $reason, files: []},
-              {name: "Traceability", status: "skipped", result: $reason, reasoning: $reason, files: []}
-            ],
-            message: $reason
-          }')
-          echo "result=$(echo "$RESULT" | jq -c '.')" >> $GITHUB_OUTPUT
+          echo "result=$RESULT" >> $GITHUB_OUTPUT
+          echo "checks_passed=$CHECKS_PASSED" >> $GITHUB_OUTPUT
+          echo "checks_failed=$CHECKS_FAILED" >> $GITHUB_OUTPUT
+          echo "checks_skipped=$CHECKS_SKIPPED" >> $GITHUB_OUTPUT
           exit 0
         fi
 
-        # Use shared extraction logic
-        source "${{ github.workspace }}/.github/actions/shared/extract-result.sh"
         extract_review_result "${{ steps.review.outputs.execution_file }}"
 
         # Always output

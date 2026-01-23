@@ -1,8 +1,40 @@
 #!/bin/bash
-# Shared JSON extraction logic for reviewer actions
-# Usage: source this file, then call extract_review_result "$EXEC_FILE"
+# Shared logic for reviewer actions
+# Usage: source this file, then call the functions
 # Sets: CHECKS_PASSED, CHECKS_FAILED, CHECKS_SKIPPED, PASSED, RESULT
 
+# Generate skipped result JSON
+# Usage: generate_skipped_result "reason" "Check1" "Check2" "Check3" ...
+# Sets: CHECKS_PASSED, CHECKS_FAILED, CHECKS_SKIPPED, PASSED, RESULT
+generate_skipped_result() {
+  local REASON="$1"
+  shift
+  local CHECK_NAMES=("$@")
+
+  CHECKS_PASSED=0
+  CHECKS_FAILED=0
+  CHECKS_SKIPPED=${#CHECK_NAMES[@]}
+  PASSED="true"
+
+  # Build checks array
+  local CHECKS_JSON="["
+  local FIRST=true
+  for NAME in "${CHECK_NAMES[@]}"; do
+    if [ "$FIRST" = "true" ]; then
+      FIRST=false
+    else
+      CHECKS_JSON="$CHECKS_JSON,"
+    fi
+    CHECKS_JSON="$CHECKS_JSON$(jq -n --arg name "$NAME" --arg reason "$REASON" '{name: $name, status: "skipped", result: $reason, reasoning: $reason, files: []}')"
+  done
+  CHECKS_JSON="$CHECKS_JSON]"
+
+  RESULT=$(jq -n --argjson checks "$CHECKS_JSON" --arg reason "$REASON" '{checks: $checks, message: $reason}' | jq -c '.')
+}
+
+# Extract review result from execution file
+# Usage: extract_review_result "$EXEC_FILE"
+# Sets: CHECKS_PASSED, CHECKS_FAILED, CHECKS_SKIPPED, PASSED, RESULT
 extract_review_result() {
   local EXEC="$1"
 
