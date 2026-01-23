@@ -71,22 +71,16 @@ runs:
           STATUS_EMOJI="❌"
         else
           # All skipped
-          STATUS_EMOJI="⚠️"
+          STATUS_EMOJI="⏭️"
         fi
 
-        # Build summary line - split test: Requirements uses words only, others use emoji+number
-        if [ "$REVIEW" = "Requirements" ]; then
-          # Format A: Words only (no emoji)
-          SUMMARY_PARTS="$CHECKS_PASSED passed • $CHECKS_FAILED failed • $CHECKS_SKIPPED skipped"
-        else
-          # Format B: Emoji + number only (compact)
-          SUMMARY_PARTS="✅ $CHECKS_PASSED • ❌ $CHECKS_FAILED • ⚠️ $CHECKS_SKIPPED"
-        fi
+        # Build summary line with emojis
+        SUMMARY_PARTS="✅ $CHECKS_PASSED • ❌ $CHECKS_FAILED • ⏭️ $CHECKS_SKIPPED"
 
         # Build prompt link
         PROMPT_LINK=""
         if [ -n "$PROMPT_FILE" ]; then
-          PROMPT_LINK="[View agent prompt](https://github.com/${{ github.repository }}/blob/${{ github.head_ref || github.ref_name }}/$PROMPT_FILE)"
+          PROMPT_LINK="[View agent prompt](https://github.com/${{ github.repository }}/blob/${{ inputs.sha }}/$PROMPT_FILE)"
         fi
 
         # Build checks table header
@@ -105,7 +99,7 @@ runs:
           case "$CHECK_STATUS" in
             "passed") CHECK_EMOJI="✅" ;;
             "failed") CHECK_EMOJI="❌" ;;
-            *) CHECK_EMOJI="⚠️" ;;
+            *) CHECK_EMOJI="⏭️" ;;
           esac
 
           # Get files for this check
@@ -194,7 +188,7 @@ runs:
           # Create new comment
           {
             echo "$MARKER"
-            echo "PR review updates from your Constellos agents. Based on linked issue(s), context files, and committed changes."
+            echo "PR feedback updates from your reviewer agents. Based on linked issues, context files, and committed changes."
             echo ""
             echo "$AGENT_BLOCK"
           } > /tmp/comment.md
