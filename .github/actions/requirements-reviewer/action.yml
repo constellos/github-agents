@@ -90,8 +90,13 @@ runs:
 
         # Get issue context if available
         if [ -n "$ISSUE" ]; then
-          gh issue view $ISSUE --json title,body > .claude/review-context/issue.json 2>/dev/null || echo "{}" > .claude/review-context/issue.json
+          echo "Fetching issue $ISSUE..."
+          if ! gh issue view "$ISSUE" --json title,body > .claude/review-context/issue.json; then
+            echo "Warning: Failed to fetch issue $ISSUE"
+            echo "{}" > .claude/review-context/issue.json
+          fi
         else
+          echo "No issue number detected, skipping issue context"
           echo "{}" > .claude/review-context/issue.json
         fi
 
