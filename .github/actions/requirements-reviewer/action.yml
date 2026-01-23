@@ -169,7 +169,7 @@ runs:
       shell: bash
       run: |
         # Use shared extraction logic
-        source "${{ github.workspace }}/.github/actions/shared/extract-result.sh"
+        source "${{ github.action_path }}/../shared/extract-result.sh"
 
         # Handle skipped case first
         if [ "${{ steps.validate.outputs.skip }}" = "true" ]; then
