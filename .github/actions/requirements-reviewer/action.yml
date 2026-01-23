@@ -198,16 +198,9 @@ runs:
 
         EXEC="${{ steps.review.outputs.execution_file }}"
         if [ -f "$EXEC" ]; then
-          # Debug: Show what we're working with
-          echo "DEBUG: Checking execution file..."
-          echo "DEBUG: File exists, size: $(wc -c < "$EXEC") bytes"
-          echo "DEBUG: Message types in file:"
-          jq -r '.[].type' "$EXEC" 2>/dev/null | sort | uniq -c || echo "DEBUG: jq failed"
-
           # Get ALL text from assistant messages, joined together
           ALL_TEXT=$(jq -r '[.[] | select(.type=="assistant") | .message.content[]? | select(.type=="text") | .text] | join("\n")' "$EXEC" 2>/dev/null || echo "")
-          echo "DEBUG: ALL_TEXT length: ${#ALL_TEXT}"
-          echo "DEBUG: ALL_TEXT preview: ${ALL_TEXT:0:500}"
+
           # Strategy 1: Extract from ```json block
           JSON=$(echo "$ALL_TEXT" | sed -n '/```json/,/```/{/```/d;p;}' | head -100)
 
