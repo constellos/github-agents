@@ -1,16 +1,15 @@
-name: 'Constellos Review Actions'
-description: 'AI-powered code review using Claude - modular review actions for PR quality'
+name: 'Constellos Review Agent'
+description: 'Generic AI-powered agent runner using Claude - runs any configured agent'
 author: 'Constellos'
 
 branding:
-  icon: 'check-circle'
+  icon: 'cpu'
   color: 'purple'
 
 inputs:
-  review_type:
-    description: 'Type of review (requirements, code-quality)'
-    required: false
-    default: 'requirements'
+  agent:
+    description: 'Agent to run (e.g., requirements, code-quality, context, or custom)'
+    required: true
   claude_code_oauth_token:
     description: 'Claude Code OAuth token'
     required: true
@@ -18,37 +17,46 @@ inputs:
     description: 'Pull request number'
     required: true
   branch:
-    description: 'Branch name (for requirements review issue extraction)'
+    description: 'Branch name (used for issue extraction in requirements agent)'
     required: false
+    default: ''
   github_token:
     description: 'GitHub token'
     required: false
     default: ${{ github.token }}
+  prompt:
+    description: 'Custom prompt (overrides agent prompt file)'
+    required: false
+    default: ''
 
 outputs:
   passed:
-    description: 'Whether review passed (all checks passed)'
-    value: ${{ steps.review.outputs.passed }}
+    description: 'Whether agent checks passed (all checks passed)'
+    value: ${{ steps.extract.outputs.passed }}
+  skipped:
+    description: 'Whether the agent was skipped (e.g., no issue linked)'
+    value: ${{ steps.extract.outputs.skipped }}
   result:
-    description: 'JSON review result with checks array'
-    value: ${{ steps.review.outputs.result }}
+    description: 'JSON result from the agent'
+    value: ${{ steps.extract.outputs.result }}
   checks_passed:
     description: 'Number of checks that passed'
-    value: ${{ steps.review.outputs.checks_passed }}
+    value: ${{ steps.extract.outputs.checks_passed }}
   checks_failed:
     description: 'Number of checks that failed'
-    value: ${{ steps.review.outputs.checks_failed }}
+    value: ${{ steps.extract.outputs.checks_failed }}
   checks_skipped:
     description: 'Number of checks that were skipped'
-    value: ${{ steps.review.outputs.checks_skipped }}
+    value: ${{ steps.extract.outputs.checks_skipped }}
 
 runs:
   using: 'composite'
   steps:
+    # Delegate to specific reviewers for known agents
     - name: Run requirements reviewer
-      id: requirements-review
-      if: inputs.review_type == 'requirements'
-      uses: ./.github/actions/requirements-reviewer
+      id: requirements
+      if: inputs.agent == 'requirements'
+      uses: constellos/github-agents/.github/actions/requirements-reviewer@main
       with:
         claude_code_oauth_token: ${{ inputs.claude_code_oauth_token }}
         pr_number: ${{ inputs.pr_number }}
@@ -56,28 +64,120 @@ runs:
         github_token: ${{ inputs.github_token }}
 
     - name: Run code-quality reviewer
-      id: code-quality-review
-      if: inputs.review_type == 'code-quality'
-      uses: ./.github/actions/code-quality-reviewer
+      id: code-quality
+      if: inputs.agent == 'code-quality'
+      uses: constellos/github-agents/.github/actions/code-quality-reviewer@main
       with:
         claude_code_oauth_token: ${{ inputs.claude_code_oauth_token }}
         pr_number: ${{ inputs.pr_number }}
         github_token: ${{ inputs.github_token }}
 
-    - name: Set outputs
-      id: review
+    - name: Run context reviewer
+      id: context
+      if: inputs.agent == 'context'
+      uses: constellos/github-agents/.github/actions/context-reviewer@main
+      with:
+        claude_code_oauth_token: ${{ inputs.claude_code_oauth_token }}
+        pr_number: ${{ inputs.pr_number }}
+        github_token: ${{ inputs.github_token }}
+
+    # Generic agent runner for custom agents
+    - name: Prepare context for custom agent
+      id: custom-context
+      if: inputs.agent != 'requirements' && inputs.agent != 'code-quality' && inputs.agent != 'context'
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github_token }}
+      run: |
+        mkdir -p .claude/review-context
+
+        # Get changed files
+        gh pr view ${{ inputs.pr_number }} --json files --jq '.files[].path' > .claude/review-context/changed.txt 2>/dev/null || touch .claude/review-context/changed.txt
+
+        # Check if we have context
+        if [ ! -s ".claude/review-context/changed.txt" ]; then
+          echo "skip=true" >> $GITHUB_OUTPUT
+          echo "skip_reason=No changed files found" >> $GITHUB_OUTPUT
+        else
+          echo "skip=false" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Load custom agent prompt
+      id: custom-prompt
+      if: inputs.agent != 'requirements' && inputs.agent != 'code-quality' && inputs.agent != 'context' && steps.custom-context.outputs.skip != 'true'
       shell: bash
       run: |
-        if [ "${{ inputs.review_type }}" = "requirements" ]; then
-          echo "passed=${{ steps.requirements-review.outputs.passed }}" >> $GITHUB_OUTPUT
-          echo "result=${{ steps.requirements-review.outputs.result }}" >> $GITHUB_OUTPUT
-          echo "checks_passed=${{ steps.requirements-review.outputs.checks_passed }}" >> $GITHUB_OUTPUT
-          echo "checks_failed=${{ steps.requirements-review.outputs.checks_failed }}" >> $GITHUB_OUTPUT
-          echo "checks_skipped=${{ steps.requirements-review.outputs.checks_skipped }}" >> $GITHUB_OUTPUT
+        AGENT="${{ inputs.agent }}"
+
+        # Use custom prompt if provided, otherwise load from file
+        if [ -n "${{ inputs.prompt }}" ]; then
+          PROMPT="${{ inputs.prompt }}"
+        elif [ -f ".constellos/agents/${AGENT}.md" ]; then
+          PROMPT=$(cat ".constellos/agents/${AGENT}.md")
         else
-          echo "passed=${{ steps.code-quality-review.outputs.passed }}" >> $GITHUB_OUTPUT
-          echo "result=${{ steps.code-quality-review.outputs.result }}" >> $GITHUB_OUTPUT
-          echo "checks_passed=${{ steps.code-quality-review.outputs.checks_passed }}" >> $GITHUB_OUTPUT
-          echo "checks_failed=${{ steps.code-quality-review.outputs.checks_failed }}" >> $GITHUB_OUTPUT
-          echo "checks_skipped=${{ steps.code-quality-review.outputs.checks_skipped }}" >> $GITHUB_OUTPUT
+          echo "Error: No prompt found for agent '${AGENT}'"
+          echo "Expected: .constellos/agents/${AGENT}.md or inputs.prompt"
+          exit 1
         fi
+
+        echo "prompt<<ENDOFPROMPT" >> $GITHUB_OUTPUT
+        echo "$PROMPT" >> $GITHUB_OUTPUT
+        echo "ENDOFPROMPT" >> $GITHUB_OUTPUT
+
+    - name: Run custom agent
+      id: custom-review
+      if: inputs.agent != 'requirements' && inputs.agent != 'code-quality' && inputs.agent != 'context' && steps.custom-context.outputs.skip != 'true'
+      uses: anthropics/claude-code-base-action@main
+      with:
+        claude_code_oauth_token: ${{ inputs.claude_code_oauth_token }}
+        prompt: ${{ steps.custom-prompt.outputs.prompt }}
+
+    - name: Extract result
+      id: extract
+      shell: bash
+      run: |
+        AGENT="${{ inputs.agent }}"
+
+        # Use shared extraction logic
+        source "${{ github.action_path }}/.github/actions/shared/extract-result.sh"
+
+        # Route to appropriate output based on agent type
+        if [ "$AGENT" = "requirements" ]; then
+          PASSED="${{ steps.requirements.outputs.passed }}"
+          SKIPPED="${{ steps.requirements.outputs.skipped }}"
+          RESULT="${{ steps.requirements.outputs.result }}"
+          CHECKS_PASSED="${{ steps.requirements.outputs.checks_passed }}"
+          CHECKS_FAILED="${{ steps.requirements.outputs.checks_failed }}"
+          CHECKS_SKIPPED="${{ steps.requirements.outputs.checks_skipped }}"
+        elif [ "$AGENT" = "code-quality" ]; then
+          PASSED="${{ steps.code-quality.outputs.passed }}"
+          SKIPPED="${{ steps.code-quality.outputs.skipped }}"
+          RESULT="${{ steps.code-quality.outputs.result }}"
+          CHECKS_PASSED="${{ steps.code-quality.outputs.checks_passed }}"
+          CHECKS_FAILED="${{ steps.code-quality.outputs.checks_failed }}"
+          CHECKS_SKIPPED="${{ steps.code-quality.outputs.checks_skipped }}"
+        elif [ "$AGENT" = "context" ]; then
+          PASSED="${{ steps.context.outputs.passed }}"
+          SKIPPED="${{ steps.context.outputs.skipped }}"
+          RESULT="${{ steps.context.outputs.result }}"
+          CHECKS_PASSED="${{ steps.context.outputs.checks_passed }}"
+          CHECKS_FAILED="${{ steps.context.outputs.checks_failed }}"
+          CHECKS_SKIPPED="${{ steps.context.outputs.checks_skipped }}"
+        else
+          # Custom agent - extract from execution file or handle skip
+          if [ "${{ steps.custom-context.outputs.skip }}" = "true" ]; then
+            generate_skipped_result "${{ steps.custom-context.outputs.skip_reason }}" \
+              "Review"
+            SKIPPED="true"
+          else
+            extract_review_result "${{ steps.custom-review.outputs.execution_file }}"
+            SKIPPED="false"
+          fi
+        fi
+
+        echo "passed=${PASSED:-false}" >> $GITHUB_OUTPUT
+        echo "skipped=${SKIPPED:-false}" >> $GITHUB_OUTPUT
+        echo "result=${RESULT:-'{}'}" >> $GITHUB_OUTPUT
+        echo "checks_passed=${CHECKS_PASSED:-0}" >> $GITHUB_OUTPUT
+        echo "checks_failed=${CHECKS_FAILED:-0}" >> $GITHUB_OUTPUT
+        echo "checks_skipped=${CHECKS_SKIPPED:-0}" >> $GITHUB_OUTPUT
