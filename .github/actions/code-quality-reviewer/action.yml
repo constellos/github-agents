@@ -62,8 +62,8 @@ runs:
       id: agent
       shell: bash
       run: |
-        if [ -f ".claude/agents/reviewers/code-quality.md" ]; then
-          PROMPT=$(cat .claude/agents/reviewers/code-quality.md)
+        if [ -f ".constellos/agents/code-quality.md" ]; then
+          PROMPT=$(cat .constellos/agents/code-quality.md)
         else
           PROMPT='# Code Quality Review
 

@@ -97,8 +97,8 @@ runs:
       id: agent
       shell: bash
       run: |
-        if [ -f ".claude/agents/reviewers/requirements.md" ]; then
-          PROMPT=$(cat .claude/agents/reviewers/requirements.md)
+        if [ -f ".constellos/agents/requirements.md" ]; then
+          PROMPT=$(cat .constellos/agents/requirements.md)
         else
           PROMPT="# Requirements Review
 
