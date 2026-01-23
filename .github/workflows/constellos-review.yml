@@ -6,6 +6,11 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
 
+permissions:
+  contents: read
+  issues: read
+  pull-requests: write
+
 jobs:
   # Read config and determine which agents to run
   config:
