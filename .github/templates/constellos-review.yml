@@ -12,7 +12,7 @@ on:
 permissions:
   contents: read
   issues: read
-  pull-requests: write
+  pull-requests: read
 
 jobs:
   # Read config and determine which agents to run
@@ -54,20 +54,43 @@ jobs:
           branch: ${{ github.head_ref }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Post requirements comment
+      - name: Send requirements results to webhook
         if: matrix.agent == 'requirements'
-        uses: constellos/github-agents/.github/actions/review-comment@main
-        with:
-          review_name: Requirements
-          passed: ${{ steps.requirements.outputs.passed }}
-          result_json: ${{ steps.requirements.outputs.result }}
-          checks_passed: ${{ steps.requirements.outputs.checks_passed }}
-          checks_failed: ${{ steps.requirements.outputs.checks_failed }}
-          checks_skipped: ${{ steps.requirements.outputs.checks_skipped }}
-          pr_number: ${{ github.event.number }}
-          sha: ${{ github.event.pull_request.head.sha }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          prompt_file: .constellos/agents/requirements.md
+        env:
+          RESULT_JSON: ${{ steps.requirements.outputs.result }}
+        run: |
+          # Build JSON payload safely using jq
+          jq -n \
+            --arg owner "${{ github.repository_owner }}" \
+            --arg repo "${{ github.event.repository.name }}" \
+            --argjson pr_number "${{ github.event.number }}" \
+            --arg sha "${{ github.event.pull_request.head.sha }}" \
+            --argjson run_id "${{ github.run_id }}" \
+            --arg review_name "Requirements" \
+            --argjson passed "${{ steps.requirements.outputs.passed }}" \
+            --argjson result_json "$RESULT_JSON" \
+            --argjson checks_passed "${{ steps.requirements.outputs.checks_passed || 0 }}" \
+            --argjson checks_failed "${{ steps.requirements.outputs.checks_failed || 0 }}" \
+            --argjson checks_skipped "${{ steps.requirements.outputs.checks_skipped || 0 }}" \
+            --arg prompt_file ".constellos/agents/requirements.md" \
+            '{
+              owner: $owner,
+              repo: $repo,
+              pr_number: $pr_number,
+              sha: $sha,
+              run_id: $run_id,
+              review_name: $review_name,
+              results: {
+                passed: $passed,
+                result_json: $result_json,
+                checks_passed: $checks_passed,
+                checks_failed: $checks_failed,
+                checks_skipped: $checks_skipped,
+                prompt_file: $prompt_file
+              }
+            }' | curl -X POST "https://github.constellos.ai/results" \
+              -H "Content-Type: application/json" \
+              -d @-
 
       # Code quality reviewer
       - name: Run code-quality review
@@ -79,20 +102,43 @@ jobs:
           pr_number: ${{ github.event.number }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Post code-quality comment
+      - name: Send code-quality results to webhook
         if: matrix.agent == 'code-quality'
-        uses: constellos/github-agents/.github/actions/review-comment@main
-        with:
-          review_name: Code Quality
-          passed: ${{ steps.code-quality.outputs.passed }}
-          result_json: ${{ steps.code-quality.outputs.result }}
-          checks_passed: ${{ steps.code-quality.outputs.checks_passed }}
-          checks_failed: ${{ steps.code-quality.outputs.checks_failed }}
-          checks_skipped: ${{ steps.code-quality.outputs.checks_skipped }}
-          pr_number: ${{ github.event.number }}
-          sha: ${{ github.event.pull_request.head.sha }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          prompt_file: .constellos/agents/code-quality.md
+        env:
+          RESULT_JSON: ${{ steps.code-quality.outputs.result }}
+        run: |
+          # Build JSON payload safely using jq
+          jq -n \
+            --arg owner "${{ github.repository_owner }}" \
+            --arg repo "${{ github.event.repository.name }}" \
+            --argjson pr_number "${{ github.event.number }}" \
+            --arg sha "${{ github.event.pull_request.head.sha }}" \
+            --argjson run_id "${{ github.run_id }}" \
+            --arg review_name "Code Quality" \
+            --argjson passed "${{ steps.code-quality.outputs.passed }}" \
+            --argjson result_json "$RESULT_JSON" \
+            --argjson checks_passed "${{ steps.code-quality.outputs.checks_passed || 0 }}" \
+            --argjson checks_failed "${{ steps.code-quality.outputs.checks_failed || 0 }}" \
+            --argjson checks_skipped "${{ steps.code-quality.outputs.checks_skipped || 0 }}" \
+            --arg prompt_file ".constellos/agents/code-quality.md" \
+            '{
+              owner: $owner,
+              repo: $repo,
+              pr_number: $pr_number,
+              sha: $sha,
+              run_id: $run_id,
+              review_name: $review_name,
+              results: {
+                passed: $passed,
+                result_json: $result_json,
+                checks_passed: $checks_passed,
+                checks_failed: $checks_failed,
+                checks_skipped: $checks_skipped,
+                prompt_file: $prompt_file
+              }
+            }' | curl -X POST "https://github.constellos.ai/results" \
+              -H "Content-Type: application/json" \
+              -d @-
 
       # Context reviewer
       - name: Run context review
@@ -104,17 +150,40 @@ jobs:
           pr_number: ${{ github.event.number }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Post context comment
+      - name: Send context results to webhook
         if: matrix.agent == 'context'
-        uses: constellos/github-agents/.github/actions/review-comment@main
-        with:
-          review_name: Context
-          passed: ${{ steps.context.outputs.passed }}
-          result_json: ${{ steps.context.outputs.result }}
-          checks_passed: ${{ steps.context.outputs.checks_passed }}
-          checks_failed: ${{ steps.context.outputs.checks_failed }}
-          checks_skipped: ${{ steps.context.outputs.checks_skipped }}
-          pr_number: ${{ github.event.number }}
-          sha: ${{ github.event.pull_request.head.sha }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          prompt_file: .constellos/agents/context.md
+        env:
+          RESULT_JSON: ${{ steps.context.outputs.result }}
+        run: |
+          # Build JSON payload safely using jq
+          jq -n \
+            --arg owner "${{ github.repository_owner }}" \
+            --arg repo "${{ github.event.repository.name }}" \
+            --argjson pr_number "${{ github.event.number }}" \
+            --arg sha "${{ github.event.pull_request.head.sha }}" \
+            --argjson run_id "${{ github.run_id }}" \
+            --arg review_name "Context" \
+            --argjson passed "${{ steps.context.outputs.passed }}" \
+            --argjson result_json "$RESULT_JSON" \
+            --argjson checks_passed "${{ steps.context.outputs.checks_passed || 0 }}" \
+            --argjson checks_failed "${{ steps.context.outputs.checks_failed || 0 }}" \
+            --argjson checks_skipped "${{ steps.context.outputs.checks_skipped || 0 }}" \
+            --arg prompt_file ".constellos/agents/context.md" \
+            '{
+              owner: $owner,
+              repo: $repo,
+              pr_number: $pr_number,
+              sha: $sha,
+              run_id: $run_id,
+              review_name: $review_name,
+              results: {
+                passed: $passed,
+                result_json: $result_json,
+                checks_passed: $checks_passed,
+                checks_failed: $checks_failed,
+                checks_skipped: $checks_skipped,
+                prompt_file: $prompt_file
+              }
+            }' | curl -X POST "https://github.constellos.ai/results" \
+              -H "Content-Type: application/json" \
+              -d @-
