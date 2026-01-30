@@ -49,25 +49,101 @@ extract_review_result() {
     # Get ALL text from assistant messages, joined together
     ALL_TEXT=$(jq -r '[.[] | select(.type=="assistant") | .message.content[]? | select(.type=="text") | .text] | join("\n")' "$EXEC" 2>/dev/null || echo "")
 
-    # Strategy 1: Extract from ```json block
-    JSON=$(echo "$ALL_TEXT" | sed -n '/```json/,/```/{/```/d;p;}' | head -100)
+    JSON=""
 
-    # Strategy 2: If no json block, try to find raw JSON object with "checks" key
-    if ! echo "$JSON" | jq . >/dev/null 2>&1; then
-      JSON=$(echo "$ALL_TEXT" | grep -oP '\{"checks":\s*\[.*\]\s*(,"message":[^}]*)?\}' | head -1)
+    # Strategy 1: Extract from ```json blocks — take the LAST valid one with .checks
+    # (Claude may output example JSON before the actual result)
+    if [ -z "$JSON" ]; then
+      local BLOCK=""
+      local IN_BLOCK=false
+      while IFS= read -r line; do
+        if [[ "$line" == '```json'* ]]; then
+          IN_BLOCK=true
+          BLOCK=""
+          continue
+        fi
+        if [[ "$line" == '```'* ]] && [ "$IN_BLOCK" = true ]; then
+          IN_BLOCK=false
+          if echo "$BLOCK" | jq -e '.checks' >/dev/null 2>&1; then
+            JSON="$BLOCK"
+            # Don't break — keep going to find the LAST valid block
+          fi
+          continue
+        fi
+        if [ "$IN_BLOCK" = true ]; then
+          BLOCK="${BLOCK}${line}"$'\n'
+        fi
+      done <<< "$ALL_TEXT"
+      if [ -n "$JSON" ]; then
+        echo "  [extract] Strategy 1 matched (json code block)" >&2
+      fi
     fi
 
-    # Strategy 3: Extract any JSON object starting with {"checks"
-    if ! echo "$JSON" | jq . >/dev/null 2>&1; then
-      JSON=$(echo "$ALL_TEXT" | perl -ne 'print if /\{"checks":\[/.../"message":/' | tr '\n' ' ')
+    # Strategy 2: Try to find raw JSON object with "checks" key on a single line
+    if [ -z "$JSON" ] || ! echo "$JSON" | jq -e '.checks' >/dev/null 2>&1; then
+      JSON=""
+      local CANDIDATE
+      CANDIDATE=$(echo "$ALL_TEXT" | grep -oP '\{"checks":\s*\[.*\]\s*(,"message":[^}]*)?\}' 2>/dev/null | head -1 || true)
+      if [ -n "$CANDIDATE" ] && echo "$CANDIDATE" | jq -e '.checks' >/dev/null 2>&1; then
+        JSON="$CANDIDATE"
+        echo "  [extract] Strategy 2 matched (grep single-line)" >&2
+      fi
     fi
 
-    # Strategy 4: Use Python for robust multiline JSON extraction
-    if ! echo "$JSON" | jq . >/dev/null 2>&1; then
-      JSON=$(echo "$ALL_TEXT" | python3 -c "import re,sys; t=sys.stdin.read(); m=re.search(r'\{[^{}]*\"checks\"[^{}]*\[.*?\][^{}]*\}',t,re.DOTALL); print(m.group() if m else '')" 2>/dev/null)
+    # Strategy 3: Extract JSON starting with {"checks" using perl range operator
+    if [ -z "$JSON" ] || ! echo "$JSON" | jq -e '.checks' >/dev/null 2>&1; then
+      JSON=""
+      local CANDIDATE
+      CANDIDATE=$(echo "$ALL_TEXT" | perl -ne 'print if /\{"checks":\s*\[/.../"message"\s*:/' 2>/dev/null | tr '\n' ' ' || true)
+      if [ -n "$CANDIDATE" ] && echo "$CANDIDATE" | jq -e '.checks' >/dev/null 2>&1; then
+        JSON="$CANDIDATE"
+        echo "  [extract] Strategy 3 matched (perl range)" >&2
+      fi
     fi
 
-    if echo "$JSON" | jq . >/dev/null 2>&1; then
+    # Strategy 4: Use Python brace-depth counter for robust multiline extraction
+    if [ -z "$JSON" ] || ! echo "$JSON" | jq -e '.checks' >/dev/null 2>&1; then
+      JSON=""
+      local CANDIDATE
+      CANDIDATE=$(echo "$ALL_TEXT" | python3 -c "
+import sys, json
+
+text = sys.stdin.read()
+# Find all top-level JSON objects containing 'checks'
+results = []
+i = 0
+while i < len(text):
+    if text[i] == '{':
+        depth = 0
+        start = i
+        while i < len(text):
+            if text[i] == '{':
+                depth += 1
+            elif text[i] == '}':
+                depth -= 1
+                if depth == 0:
+                    candidate = text[start:i+1]
+                    try:
+                        obj = json.loads(candidate)
+                        if 'checks' in obj:
+                            results.append(candidate)
+                    except (json.JSONDecodeError, ValueError):
+                        pass
+                    break
+            i += 1
+    i += 1
+
+# Print the last valid match (actual result comes after examples)
+if results:
+    print(results[-1])
+" 2>/dev/null || true)
+      if [ -n "$CANDIDATE" ] && echo "$CANDIDATE" | jq -e '.checks' >/dev/null 2>&1; then
+        JSON="$CANDIDATE"
+        echo "  [extract] Strategy 4 matched (python brace-depth)" >&2
+      fi
+    fi
+
+    if [ -n "$JSON" ] && echo "$JSON" | jq -e '.checks' >/dev/null 2>&1; then
       # Count checks by status
       CHECKS_PASSED=$(echo "$JSON" | jq '[.checks[]? | select(.status == "passed")] | length')
       CHECKS_FAILED=$(echo "$JSON" | jq '[.checks[]? | select(.status == "failed")] | length')
@@ -82,6 +158,8 @@ extract_review_result() {
       fi
 
       RESULT=$(echo "$JSON" | jq -c '.')
+    else
+      echo "  [extract] No strategy matched — using default failed result" >&2
     fi
   fi
 }
