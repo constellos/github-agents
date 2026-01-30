@@ -12,7 +12,7 @@ on:
 permissions:
   contents: read
   issues: read
-  pull-requests: read
+  pull-requests: read  # REQUIRED: agents need this to fetch changed files via gh pr view
 
 jobs:
   # Read config and determine which agents to run
@@ -55,9 +55,13 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Send requirements results to webhook
-        if: matrix.agent == 'requirements'
+        if: always() && matrix.agent == 'requirements'
         env:
-          RESULT_JSON: ${{ steps.requirements.outputs.result }}
+          RESULT_JSON: ${{ steps.requirements.outputs.result || '{"checks":[],"message":"Review failed to complete"}' }}
+          PASSED: ${{ steps.requirements.outputs.passed || 'false' }}
+          CHECKS_PASSED: ${{ steps.requirements.outputs.checks_passed || '0' }}
+          CHECKS_FAILED: ${{ steps.requirements.outputs.checks_failed || '0' }}
+          CHECKS_SKIPPED: ${{ steps.requirements.outputs.checks_skipped || '0' }}
         run: |
           # Build JSON payload safely using jq
           jq -n \
@@ -67,11 +71,11 @@ jobs:
             --arg sha "${{ github.event.pull_request.head.sha }}" \
             --argjson run_id "${{ github.run_id }}" \
             --arg review_name "Requirements" \
-            --argjson passed "${{ steps.requirements.outputs.passed }}" \
+            --argjson passed "$PASSED" \
             --argjson result_json "$RESULT_JSON" \
-            --argjson checks_passed "${{ steps.requirements.outputs.checks_passed || 0 }}" \
-            --argjson checks_failed "${{ steps.requirements.outputs.checks_failed || 0 }}" \
-            --argjson checks_skipped "${{ steps.requirements.outputs.checks_skipped || 0 }}" \
+            --argjson checks_passed "$CHECKS_PASSED" \
+            --argjson checks_failed "$CHECKS_FAILED" \
+            --argjson checks_skipped "$CHECKS_SKIPPED" \
             --arg prompt_file ".constellos/agents/requirements.md" \
             '{
               owner: $owner,
@@ -103,9 +107,13 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Send code-quality results to webhook
-        if: matrix.agent == 'code-quality'
+        if: always() && matrix.agent == 'code-quality'
         env:
-          RESULT_JSON: ${{ steps.code-quality.outputs.result }}
+          RESULT_JSON: ${{ steps.code-quality.outputs.result || '{"checks":[],"message":"Review failed to complete"}' }}
+          PASSED: ${{ steps.code-quality.outputs.passed || 'false' }}
+          CHECKS_PASSED: ${{ steps.code-quality.outputs.checks_passed || '0' }}
+          CHECKS_FAILED: ${{ steps.code-quality.outputs.checks_failed || '0' }}
+          CHECKS_SKIPPED: ${{ steps.code-quality.outputs.checks_skipped || '0' }}
         run: |
           # Build JSON payload safely using jq
           jq -n \
@@ -115,11 +123,11 @@ jobs:
             --arg sha "${{ github.event.pull_request.head.sha }}" \
             --argjson run_id "${{ github.run_id }}" \
             --arg review_name "Code Quality" \
-            --argjson passed "${{ steps.code-quality.outputs.passed }}" \
+            --argjson passed "$PASSED" \
             --argjson result_json "$RESULT_JSON" \
-            --argjson checks_passed "${{ steps.code-quality.outputs.checks_passed || 0 }}" \
-            --argjson checks_failed "${{ steps.code-quality.outputs.checks_failed || 0 }}" \
-            --argjson checks_skipped "${{ steps.code-quality.outputs.checks_skipped || 0 }}" \
+            --argjson checks_passed "$CHECKS_PASSED" \
+            --argjson checks_failed "$CHECKS_FAILED" \
+            --argjson checks_skipped "$CHECKS_SKIPPED" \
             --arg prompt_file ".constellos/agents/code-quality.md" \
             '{
               owner: $owner,
@@ -151,9 +159,13 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Send context results to webhook
-        if: matrix.agent == 'context'
+        if: always() && matrix.agent == 'context'
         env:
-          RESULT_JSON: ${{ steps.context.outputs.result }}
+          RESULT_JSON: ${{ steps.context.outputs.result || '{"checks":[],"message":"Review failed to complete"}' }}
+          PASSED: ${{ steps.context.outputs.passed || 'false' }}
+          CHECKS_PASSED: ${{ steps.context.outputs.checks_passed || '0' }}
+          CHECKS_FAILED: ${{ steps.context.outputs.checks_failed || '0' }}
+          CHECKS_SKIPPED: ${{ steps.context.outputs.checks_skipped || '0' }}
         run: |
           # Build JSON payload safely using jq
           jq -n \
@@ -163,11 +175,11 @@ jobs:
             --arg sha "${{ github.event.pull_request.head.sha }}" \
             --argjson run_id "${{ github.run_id }}" \
             --arg review_name "Context" \
-            --argjson passed "${{ steps.context.outputs.passed }}" \
+            --argjson passed "$PASSED" \
             --argjson result_json "$RESULT_JSON" \
-            --argjson checks_passed "${{ steps.context.outputs.checks_passed || 0 }}" \
-            --argjson checks_failed "${{ steps.context.outputs.checks_failed || 0 }}" \
-            --argjson checks_skipped "${{ steps.context.outputs.checks_skipped || 0 }}" \
+            --argjson checks_passed "$CHECKS_PASSED" \
+            --argjson checks_failed "$CHECKS_FAILED" \
+            --argjson checks_skipped "$CHECKS_SKIPPED" \
             --arg prompt_file ".constellos/agents/context.md" \
             '{
               owner: $owner,
