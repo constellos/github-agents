@@ -15,6 +15,18 @@ permissions:
   pull-requests: read  # REQUIRED: agents need this to fetch changed files via gh pr view
 
 jobs:
+  # Auto-sync this workflow from the latest template
+  sync-workflow:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+      - uses: constellos/github-agents/.github/actions/sync-workflow@main
+
   # Read config and determine which agents to run
   config:
     runs-on: ubuntu-latest
