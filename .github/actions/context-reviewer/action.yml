@@ -47,16 +47,28 @@ runs:
       run: |
         mkdir -p .claude/review-context
 
-        # Get changed files
-        gh pr view ${{ inputs.pr_number }} --json files --jq '.files[].path' > .claude/review-context/changed.txt 2>/dev/null || touch .claude/review-context/changed.txt
+        # Get changed files — capture errors instead of suppressing them
+        if ! gh pr view ${{ inputs.pr_number }} --json files --jq '.files[].path' > .claude/review-context/changed.txt 2>/tmp/gh-error.log; then
+          echo "::warning::Failed to fetch PR files. Check that the workflow has 'pull-requests: read' permission."
+          cat /tmp/gh-error.log >&2
+          touch .claude/review-context/changed.txt
+        fi
 
         # Get PR details
-        gh pr view ${{ inputs.pr_number }} --json title,body,author > .claude/review-context/pr.json 2>/dev/null || echo '{}' > .claude/review-context/pr.json
+        if ! gh pr view ${{ inputs.pr_number }} --json title,body,author > .claude/review-context/pr.json 2>/tmp/gh-pr-error.log; then
+          echo "::warning::Failed to fetch PR details. Check that the workflow has 'pull-requests: read' permission."
+          cat /tmp/gh-pr-error.log >&2
+          echo '{}' > .claude/review-context/pr.json
+        fi
 
         # Check if we have context
         if [ ! -s ".claude/review-context/changed.txt" ]; then
           echo "skip=true" >> $GITHUB_OUTPUT
-          echo "skip_reason=No changed files found" >> $GITHUB_OUTPUT
+          if [ -f /tmp/gh-error.log ] && grep -qi "403\|forbidden\|permission\|Resource not accessible" /tmp/gh-error.log; then
+            echo "skip_reason=Missing 'pull-requests: read' permission — add it to workflow permissions block" >> $GITHUB_OUTPUT
+          else
+            echo "skip_reason=No changed files found or unable to access PR data" >> $GITHUB_OUTPUT
+          fi
         else
           echo "skip=false" >> $GITHUB_OUTPUT
         fi
